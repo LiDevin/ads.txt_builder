@@ -1,3 +1,4 @@
+import { loadToken } from "./auth/tokenStore";
 import { startRouter } from "./router";
 import { GitHubVersionStore } from "./versionStore/githubVersionStore";
 
@@ -6,4 +7,7 @@ if (!container) {
   throw new Error("Missing #app container in index.html");
 }
 
-startRouter(container, new GitHubVersionStore());
+const store = new GitHubVersionStore();
+store.setToken(loadToken());
+
+startRouter(container, store);

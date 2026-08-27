@@ -1,19 +1,23 @@
 import type { VersionStore } from "../versionStore/types";
+import { appendLink } from "./domHelpers";
 import { propertyTypeLabel } from "./propertyTypeLabel";
+import { tryLoad } from "./tryLoad";
 
 export async function renderPropertyList(container: HTMLElement, store: VersionStore): Promise<void> {
   container.innerHTML = "<p>Loading properties…</p>";
 
-  let properties;
-  try {
-    properties = await store.listProperties();
-  } catch (error) {
-    container.innerHTML = `<p role="alert">Failed to load properties: ${(error as Error).message}</p>`;
+  const properties = await tryLoad(container, () => store.listProperties(), "Failed to load properties");
+  if (!properties) {
     return;
   }
 
+  container.innerHTML = "";
+  appendLink(container, "#/add", "Add a new property");
+
   if (properties.length === 0) {
-    container.innerHTML = "<p>No properties tracked yet.</p>";
+    const empty = document.createElement("p");
+    empty.textContent = "No properties tracked yet.";
+    container.appendChild(empty);
     return;
   }
 
@@ -36,6 +40,5 @@ export async function renderPropertyList(container: HTMLElement, store: VersionS
     list.appendChild(item);
   }
 
-  container.innerHTML = "";
   container.appendChild(list);
 }

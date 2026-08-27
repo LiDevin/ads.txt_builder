@@ -1,27 +1,41 @@
 import type { VersionStore } from "../versionStore/types";
+import { appendLink } from "./domHelpers";
+import { downloadFilename, toDownloadHref } from "./download";
 import { propertyTypeLabel } from "./propertyTypeLabel";
+import { editHash, propertyHash, versionHash } from "./routes";
+import { tryLoad } from "./tryLoad";
 
 export async function renderPropertyDetail(
   container: HTMLElement,
   store: VersionStore,
   propertyId: string,
+  versionRef?: string,
 ): Promise<void> {
   container.innerHTML = "<p>Loading property…</p>";
 
-  let property;
-  try {
-    property = await store.getProperty(propertyId);
-  } catch (error) {
-    container.innerHTML = `<p role="alert">Failed to load property: ${(error as Error).message}</p>`;
+  const loaded = await tryLoad(
+    container,
+    () => Promise.all([store.getProperty(propertyId), store.listVersions(propertyId)]),
+    "Failed to load property",
+  );
+  if (!loaded) {
     return;
+  }
+  const [property, versions] = loaded;
+
+  let displayedContent = property.content;
+
+  if (versionRef) {
+    const version = await tryLoad(container, () => store.getVersion(propertyId, versionRef), "Failed to load version");
+    if (!version) {
+      return;
+    }
+    displayedContent = version.content;
   }
 
   container.innerHTML = "";
 
-  const backLink = document.createElement("a");
-  backLink.href = "#/";
-  backLink.textContent = "← Back to properties";
-  container.appendChild(backLink);
+  appendLink(container, "#/", "← Back to properties");
 
   const heading = document.createElement("h1");
   heading.textContent = property.name;
@@ -32,8 +46,48 @@ export async function renderPropertyDetail(
   typeLabel.textContent = propertyTypeLabel(property.type);
   container.appendChild(typeLabel);
 
+  if (versionRef) {
+    const notice = document.createElement("p");
+    notice.textContent = "Viewing a past version.";
+    container.appendChild(notice);
+
+    appendLink(container, propertyHash(propertyId), "View current version");
+  } else {
+    appendLink(container, editHash(propertyId), "Edit");
+    appendLink(container, toDownloadHref(property.content), "Download .txt", {
+      download: downloadFilename(property),
+    });
+  }
+
   const content = document.createElement("pre");
   content.className = "property-content";
-  content.textContent = property.content;
+  content.textContent = displayedContent;
   container.appendChild(content);
+
+  const historyHeading = document.createElement("h2");
+  historyHeading.textContent = "Version history";
+  container.appendChild(historyHeading);
+
+  const historyList = document.createElement("ul");
+  historyList.className = "version-history";
+
+  for (const version of versions) {
+    const item = document.createElement("li");
+
+    appendLink(item, versionHash(propertyId, version.ref), version.timestamp);
+
+    const comment = document.createElement("span");
+    comment.className = "version-comment";
+    comment.textContent = version.comment;
+    item.appendChild(comment);
+
+    const author = document.createElement("span");
+    author.className = "version-author";
+    author.textContent = version.author;
+    item.appendChild(author);
+
+    historyList.appendChild(item);
+  }
+
+  container.appendChild(historyList);
 }
