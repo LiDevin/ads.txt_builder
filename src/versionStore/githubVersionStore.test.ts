@@ -408,4 +408,50 @@ describe("GitHubVersionStore", () => {
     ).rejects.toThrow(/GitHub API request failed \(403\)/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("renames a property by updating its manifest entry, leaving other entries untouched", async () => {
+    const existingManifest = [
+      { id: "example-oo", name: "Example O&O", type: "OO" },
+      { id: "example-partner", name: "Example Partner", type: "PARTNER" },
+    ];
+    const fetchMock = stubFetch(
+      githubContentsResponse(JSON.stringify(existingManifest), "manifest-sha"),
+      githubPutResponse({ sha: "manifest-commit-sha", message: "Rename property to \"Renamed Site\"", authorName: "Alex", date: "2026-08-30T09:00:00Z" }),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await store.renameProperty("example-oo", "Renamed Site");
+
+    expect(requestMethod(fetchMock, 1)).toBe("PUT");
+    const manifestBody = requestBody(fetchMock, 1);
+    expect(manifestBody.sha).toBe("manifest-sha");
+    expect(JSON.parse(decodeBase64Utf8(manifestBody.content as string))).toEqual([
+      { id: "example-oo", name: "Renamed Site", type: "OO" },
+      { id: "example-partner", name: "Example Partner", type: "PARTNER" },
+    ]);
+    expect(authHeader(fetchMock, 1)).toBe("Bearer my-token");
+  });
+
+  it("throws PropertyNotFoundError when renaming an id missing from the manifest", async () => {
+    stubFetch(githubContentsResponse(JSON.stringify([])));
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(store.renameProperty("missing", "New Name")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("throws when the rename PUT fails (e.g. no write access)", async () => {
+    const fetchMock = stubFetch(
+      githubContentsResponse(JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO" }]), "manifest-sha"),
+      failedResponse(403),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("read-only-token");
+
+    await expect(store.renameProperty("example-oo", "Renamed Site")).rejects.toThrow(
+      /GitHub API request failed \(403\)/,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

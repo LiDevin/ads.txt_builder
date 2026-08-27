@@ -35,6 +35,7 @@ export interface VersionStore {
   checkAccess(): Promise<AccessLevel>;
   saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion>;
   createProperty(id: string, name: string, type: PropertyType, content: string): Promise<void>;
+  renameProperty(id: string, newName: string): Promise<void>;
 }
 
 export class PropertyNotFoundError extends Error {

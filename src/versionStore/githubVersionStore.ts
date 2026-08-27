@@ -215,4 +215,24 @@ export class GitHubVersionStore implements VersionStore {
     });
     throwIfFailed(manifestResponse, "updating property manifest");
   }
+
+  async renameProperty(id: string, newName: string): Promise<void> {
+    const manifest = await fetchFileMeta(MANIFEST_PATH, this.token);
+    const properties = JSON.parse(manifest.content) as PropertySummary[];
+    const property = properties.find((candidate) => candidate.id === id);
+    if (!property) {
+      throw new PropertyNotFoundError(id);
+    }
+    property.name = newName;
+
+    const manifestResponse = await githubFetch(repoApiUrl(`/contents/${MANIFEST_PATH}`), this.token, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: `Rename property to "${newName}"`,
+        content: encodeBase64Utf8(`${JSON.stringify(properties, null, 2)}\n`),
+        sha: manifest.sha,
+      }),
+    });
+    throwIfFailed(manifestResponse, "updating property manifest");
+  }
 }

@@ -191,4 +191,34 @@ describe("FakeVersionStore", () => {
       PropertyAlreadyExistsError,
     );
   });
+
+  it("renames a property, leaving its id and content untouched", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    await store.renameProperty("oo-1", "Renamed Site");
+
+    await expect(store.listProperties()).resolves.toContainEqual({
+      id: "oo-1",
+      name: "Renamed Site",
+      type: "OO",
+    });
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({
+      id: "oo-1",
+      name: "Renamed Site",
+      content: "example.com, 1, DIRECT",
+    });
+  });
+
+  it("throws when renaming without can-write access, leaving the name unchanged", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
+
+    await expect(store.renameProperty("oo-1", "Renamed Site")).rejects.toThrow();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Main Site" });
+  });
+
+  it("throws PropertyNotFoundError when renaming an unknown property", async () => {
+    const store = new FakeVersionStore([], { accessLevel: "can-write" });
+
+    await expect(store.renameProperty("missing", "New Name")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
 });

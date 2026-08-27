@@ -126,4 +126,12 @@ export class FakeVersionStore implements VersionStore {
       ],
     });
   }
+
+  async renameProperty(id: string, newName: string): Promise<void> {
+    const property = this.findProperty(id);
+    if (this.accessLevel !== "can-write") {
+      throw new Error("This token does not have write access to rename properties.");
+    }
+    property.name = newName;
+  }
 }

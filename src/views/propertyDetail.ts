@@ -53,10 +53,72 @@ export async function renderPropertyDetail(
 
     appendLink(container, propertyHash(propertyId), "View current version");
   } else {
-    appendLink(container, editHash(propertyId), "Edit");
-    appendLink(container, toDownloadHref(property.content), "Download .txt", {
-      download: downloadFilename(property),
-    });
+    const actionsArea = document.createElement("div");
+    container.appendChild(actionsArea);
+
+    function renderActions(): void {
+      actionsArea.innerHTML = "";
+
+      const renameButton = document.createElement("button");
+      renameButton.type = "button";
+      renameButton.textContent = "Rename";
+      renameButton.addEventListener("click", renderRenameForm);
+      actionsArea.appendChild(renameButton);
+
+      appendLink(actionsArea, editHash(propertyId), "Edit");
+      appendLink(actionsArea, toDownloadHref(property.content), "Download .txt", {
+        download: downloadFilename(property),
+      });
+    }
+
+    function renderRenameForm(): void {
+      actionsArea.innerHTML = "";
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "rename-name";
+      nameInput.value = property.name;
+      actionsArea.appendChild(nameInput);
+
+      const saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.textContent = "Save";
+      actionsArea.appendChild(saveButton);
+
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.textContent = "Cancel";
+      cancelButton.addEventListener("click", renderActions);
+      actionsArea.appendChild(cancelButton);
+
+      const errorMessage = document.createElement("p");
+      errorMessage.setAttribute("role", "alert");
+      actionsArea.appendChild(errorMessage);
+
+      saveButton.addEventListener("click", () => {
+        void handleRenameSave(nameInput, errorMessage);
+      });
+    }
+
+    async function handleRenameSave(nameInput: HTMLInputElement, errorMessage: HTMLElement): Promise<void> {
+      errorMessage.textContent = "";
+      const newName = nameInput.value.trim();
+      if (!newName) {
+        errorMessage.textContent = "A display name is required.";
+        return;
+      }
+
+      try {
+        await store.renameProperty(propertyId, newName);
+      } catch (error) {
+        errorMessage.textContent = `Failed to rename: ${(error as Error).message}`;
+        return;
+      }
+
+      await renderPropertyDetail(container, store, propertyId, versionRef);
+    }
+
+    renderActions();
   }
 
   const content = document.createElement("pre");
