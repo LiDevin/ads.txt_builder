@@ -79,7 +79,12 @@ async function githubApiRequest(
   token: string | null,
   init?: GitHubRequestInit,
 ): Promise<unknown> {
-  const response = await githubFetch(url, token, init);
+  let response = await githubFetch(url, token, init);
+  if (response.status === 401 && token) {
+    // A saved token that's actually invalid must not break reads that would
+    // otherwise succeed anonymously against this public repo.
+    response = await githubFetch(url, null, init);
+  }
   throwIfFailed(response, description);
   return response.json();
 }

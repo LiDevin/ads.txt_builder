@@ -240,6 +240,34 @@ describe("GitHubVersionStore", () => {
     expect(authHeader(fetchMock, 1)).toBe("Bearer my-token");
   });
 
+  it("falls back to an anonymous request when a saved token is rejected with 401, so a bad token doesn't break public reads", async () => {
+    const fetchMock = stubFetch(failedResponse(401), githubContentsResponse(JSON.stringify([])));
+    const store = new GitHubVersionStore();
+    store.setToken("bad-token");
+
+    await expect(store.listProperties()).resolves.toEqual([]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(authHeader(fetchMock, 0)).toBe("Bearer bad-token");
+    expect(authHeader(fetchMock, 1)).toBeUndefined();
+  });
+
+  it("throws if the anonymous fallback also fails after a 401 with a token", async () => {
+    stubFetch(failedResponse(401), failedResponse(404));
+    const store = new GitHubVersionStore();
+    store.setToken("bad-token");
+
+    await expect(store.listProperties()).rejects.toThrow(/GitHub API request failed \(404\)/);
+  });
+
+  it("does not retry when there was no token to begin with (a genuine 401 is reported as-is)", async () => {
+    const fetchMock = stubFetch(failedResponse(401));
+    const store = new GitHubVersionStore();
+
+    await expect(store.listProperties()).rejects.toThrow(/GitHub API request failed \(401\)/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("reports can-write when the token grants push access", async () => {
     stubFetch(githubRepoResponse({ push: true, pull: true }));
     const store = new GitHubVersionStore();
