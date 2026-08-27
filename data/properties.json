@@ -1,4 +1,17 @@
 [
-  { "id": "example-oo-domain", "name": "example.com", "type": "OO" },
-  { "id": "example-partner", "name": "Example Ad Partner", "type": "PARTNER" }
+  {
+    "id": "example-oo-domain",
+    "name": "example.com",
+    "type": "OO"
+  },
+  {
+    "id": "example-partner",
+    "name": "Example Ad Partner",
+    "type": "PARTNER"
+  },
+  {
+    "id": "testing-site",
+    "name": "testing site",
+    "type": "OO"
+  }
 ]
