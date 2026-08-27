@@ -1,0 +1,40 @@
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 40rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #1a1a1a;
+}
+
+.property-list {
+  list-style: none;
+  padding: 0;
+}
+
+.property-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.property-type-badge {
+  font-size: 0.8rem;
+  color: #555;
+  background: #f0f0f0;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+}
+
+.property-content {
+  white-space: pre-wrap;
+  background: #f7f7f7;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+[role="alert"] {
+  color: #b00020;
+}
