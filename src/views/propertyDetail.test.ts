@@ -170,6 +170,18 @@ describe("renderPropertyDetail", () => {
     expect(renameButton.parentElement).toBe(downloadLink?.parentElement);
   });
 
+  it("styles Edit and Download as buttons", async () => {
+    const store = new FakeVersionStore([property]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const editLink = Array.from(container.querySelectorAll("a")).find((a) => a.textContent === "Edit");
+    const downloadLink = container.querySelector("a[download]");
+    expect(editLink?.className).toBe("btn");
+    expect(downloadLink?.className).toBe("btn");
+  });
+
   it("does not show Rename when viewing a past version", async () => {
     const store = new FakeVersionStore([property], { accessLevel: "can-write" });
     const container = document.createElement("div");

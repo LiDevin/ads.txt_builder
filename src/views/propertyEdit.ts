@@ -38,6 +38,7 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
 
   const saveButton = document.createElement("button");
   saveButton.type = "submit";
+  saveButton.className = "btn";
   saveButton.textContent = "Save";
   form.appendChild(saveButton);
 
@@ -70,6 +71,7 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
 
     const confirmButton = document.createElement("button");
     confirmButton.type = "button";
+    confirmButton.className = "btn";
     confirmButton.textContent = "Confirm save";
     confirmButton.addEventListener("click", () => {
       void confirmSave();
@@ -78,6 +80,7 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
 
     const backButton = document.createElement("button");
     backButton.type = "button";
+    backButton.className = "btn";
     backButton.textContent = "Back to editing";
     backButton.addEventListener("click", () => {
       reviewSection.innerHTML = "";

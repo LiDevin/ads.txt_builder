@@ -29,11 +29,13 @@ export async function renderTokenSettings(container: HTMLElement, store: Version
 
   const submit = document.createElement("button");
   submit.type = "submit";
+  submit.className = "btn";
   submit.textContent = "Save";
   form.appendChild(submit);
 
   const clearButton = document.createElement("button");
   clearButton.type = "button";
+  clearButton.className = "btn";
   clearButton.textContent = "Clear";
   form.appendChild(clearButton);
 

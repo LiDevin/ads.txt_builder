@@ -113,3 +113,20 @@ body {
   background: #ffeef0;
   color: #b31d28;
 }
+
+.btn {
+  display: inline-block;
+  font: inherit;
+  text-decoration: none;
+  color: #1a1a1a;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: #e4e4e4;
+}

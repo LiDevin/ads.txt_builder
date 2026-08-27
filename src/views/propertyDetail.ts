@@ -61,13 +61,15 @@ export async function renderPropertyDetail(
 
       const renameButton = document.createElement("button");
       renameButton.type = "button";
+      renameButton.className = "btn";
       renameButton.textContent = "Rename";
       renameButton.addEventListener("click", renderRenameForm);
       actionsArea.appendChild(renameButton);
 
-      appendLink(actionsArea, editHash(propertyId), "Edit");
+      appendLink(actionsArea, editHash(propertyId), "Edit", { className: "btn" });
       appendLink(actionsArea, toDownloadHref(property.content), "Download .txt", {
         download: downloadFilename(property),
+        className: "btn",
       });
     }
 
@@ -82,11 +84,13 @@ export async function renderPropertyDetail(
 
       const saveButton = document.createElement("button");
       saveButton.type = "button";
+      saveButton.className = "btn";
       saveButton.textContent = "Save";
       actionsArea.appendChild(saveButton);
 
       const cancelButton = document.createElement("button");
       cancelButton.type = "button";
+      cancelButton.className = "btn";
       cancelButton.textContent = "Cancel";
       cancelButton.addEventListener("click", renderActions);
       actionsArea.appendChild(cancelButton);

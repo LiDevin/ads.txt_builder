@@ -38,6 +38,7 @@ export function renderPropertyAdd(container: HTMLElement, store: VersionStore): 
 
   const submitButton = document.createElement("button");
   submitButton.type = "submit";
+  submitButton.className = "btn";
   submitButton.textContent = "Create property";
   form.appendChild(submitButton);
 
