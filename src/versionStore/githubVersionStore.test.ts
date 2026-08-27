@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GitHubVersionStore } from "./githubVersionStore";
-import { PropertyNotFoundError, VersionNotFoundError } from "./types";
+import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
 
 function requestInit(fetchMock: ReturnType<typeof vi.fn>, callIndex: number): RequestInit & { headers: Record<string, string> } {
   const [, init] = fetchMock.mock.calls[callIndex] as [string, RequestInit & { headers: Record<string, string> }];
@@ -126,6 +126,7 @@ describe("GitHubVersionStore", () => {
       name: "Example O&O",
       type: "OO",
       content: "example.com, 12345, DIRECT\n",
+      baseVersion: "blob-sha",
     });
   });
 
@@ -280,13 +281,17 @@ describe("GitHubVersionStore", () => {
 
   it("saves a new version via a PUT to the Contents API, returning the resulting commit", async () => {
     stubFetch(
-      githubContentsResponse("example.com, 1, DIRECT\n", "current-blob-sha"),
       githubPutResponse({ sha: "new-sha", message: "Add reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
     );
     const store = new GitHubVersionStore();
     store.setToken("my-token");
 
-    const version = await store.saveVersion("example-oo", "example.com, 1, DIRECT\nreseller.com, 2, RESELLER\n", "Add reseller");
+    const version = await store.saveVersion(
+      "example-oo",
+      "example.com, 1, DIRECT\nreseller.com, 2, RESELLER\n",
+      "Add reseller",
+      "current-blob-sha",
+    );
 
     expect(version).toEqual({
       ref: "new-sha",
@@ -297,31 +302,41 @@ describe("GitHubVersionStore", () => {
     });
   });
 
-  it("PUTs the new content, comment, and current blob sha, authenticated with the token", async () => {
+  it("PUTs the new content, comment, and the passed-in base version as the sha, authenticated with the token", async () => {
     const fetchMock = stubFetch(
-      githubContentsResponse("old content", "current-blob-sha"),
       githubPutResponse({ sha: "new-sha", message: "Add reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
     );
     const store = new GitHubVersionStore();
     store.setToken("my-token");
 
-    await store.saveVersion("example-oo", "new content", "Add reseller");
+    await store.saveVersion("example-oo", "new content", "Add reseller", "current-blob-sha");
 
-    expect(requestMethod(fetchMock, 1)).toBe("PUT");
-    expect(authHeader(fetchMock, 1)).toBe("Bearer my-token");
-    const body = requestBody(fetchMock, 1);
+    expect(requestMethod(fetchMock, 0)).toBe("PUT");
+    expect(authHeader(fetchMock, 0)).toBe("Bearer my-token");
+    const body = requestBody(fetchMock, 0);
     expect(body.message).toBe("Add reseller");
     expect(body.sha).toBe("current-blob-sha");
     expect(decodeBase64Utf8(body.content as string)).toBe("new content");
   });
 
   it("throws when the save is rejected (e.g. no write access), without pretending it succeeded", async () => {
-    stubFetch(githubContentsResponse("old content", "current-blob-sha"), failedResponse(403));
+    stubFetch(failedResponse(403));
     const store = new GitHubVersionStore();
     store.setToken("read-only-token");
 
-    await expect(store.saveVersion("example-oo", "new content", "Add reseller")).rejects.toThrow(
+    await expect(store.saveVersion("example-oo", "new content", "Add reseller", "current-blob-sha")).rejects.toThrow(
       /GitHub API request failed \(403\)/,
     );
+  });
+
+  it("throws SaveConflictError on a 409 response, without re-fetching a fresh sha and retrying", async () => {
+    const fetchMock = stubFetch(failedResponse(409));
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(
+      store.saveVersion("example-oo", "new content", "Add reseller", "stale-blob-sha"),
+    ).rejects.toBeInstanceOf(SaveConflictError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

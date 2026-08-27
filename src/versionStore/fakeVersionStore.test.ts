@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeVersionStore } from "./fakeVersionStore";
-import { PropertyNotFoundError, VersionNotFoundError } from "./types";
+import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
 
 const oneVersionProperty = {
   id: "oo-1",
@@ -36,6 +36,7 @@ describe("FakeVersionStore", () => {
       name: "Other Site",
       type: "OO",
       content: "other.com, 2, DIRECT\nreseller.com, 3, RESELLER",
+      baseVersion: "sha-2",
     });
   });
 
@@ -103,7 +104,12 @@ describe("FakeVersionStore", () => {
   it("saves a new version, making it the current content and prepending it to history", async () => {
     const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
 
-    const saved = await store.saveVersion("oo-1", "example.com, 1, DIRECT\nreseller.com, 2, RESELLER", "Add reseller");
+    const saved = await store.saveVersion(
+      "oo-1",
+      "example.com, 1, DIRECT\nreseller.com, 2, RESELLER",
+      "Add reseller",
+      "sha-1",
+    );
 
     expect(saved.comment).toBe("Add reseller");
     expect(saved.content).toBe("example.com, 1, DIRECT\nreseller.com, 2, RESELLER");
@@ -120,13 +126,38 @@ describe("FakeVersionStore", () => {
   it("throws when saving without can-write access, leaving the property unchanged", async () => {
     const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
 
-    await expect(store.saveVersion("oo-1", "new content", "Attempted edit")).rejects.toThrow();
+    await expect(store.saveVersion("oo-1", "new content", "Attempted edit", "sha-1")).rejects.toThrow();
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "example.com, 1, DIRECT" });
   });
 
   it("throws PropertyNotFoundError when saving to an unknown property", async () => {
     const store = new FakeVersionStore([], { accessLevel: "can-write" });
 
-    await expect(store.saveVersion("missing", "content", "comment")).rejects.toBeInstanceOf(PropertyNotFoundError);
+    await expect(store.saveVersion("missing", "content", "comment", "irrelevant")).rejects.toBeInstanceOf(
+      PropertyNotFoundError,
+    );
+  });
+
+  it("throws SaveConflictError when the passed baseVersion is stale", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    await expect(store.saveVersion("oo-1", "new content", "comment", "sha-0-stale")).rejects.toBeInstanceOf(
+      SaveConflictError,
+    );
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "example.com, 1, DIRECT" });
+  });
+
+  it("blocks the second of two overlapping saves that both started from the same version", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+    const { baseVersion } = await store.getProperty("oo-1");
+
+    const first = await store.saveVersion("oo-1", "first editor's content", "First edit", baseVersion);
+    expect(first.content).toBe("first editor's content");
+
+    await expect(
+      store.saveVersion("oo-1", "second editor's content", "Second edit", baseVersion),
+    ).rejects.toBeInstanceOf(SaveConflictError);
+
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "first editor's content" });
   });
 });

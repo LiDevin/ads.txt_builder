@@ -140,6 +140,38 @@ describe("renderPropertyEdit", () => {
     expect(textarea.value).toBe("example.com, 1, DIRECT\nnew.com, 2, RESELLER");
   });
 
+  it("shows a conflict notice and diff against the newer version instead of a generic error", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyEdit(container, store, "oo-1");
+
+    // Someone else saves a newer version while this editor session is still open.
+    await store.saveVersion(
+      "oo-1",
+      "example.com, 1, DIRECT\nother-editor.com, 9, RESELLER",
+      "Someone else's edit",
+      "sha-1",
+    );
+
+    setContentAndComment(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER", "My edit");
+    submit(container);
+
+    const confirmButton = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent === "Confirm save",
+    ) as HTMLButtonElement;
+    confirmButton.click();
+    await flush();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("changed since you started editing");
+    expect(container.textContent).toContain("other-editor.com, 9, RESELLER");
+    expect(window.location.hash).toBe("");
+
+    // The other editor's save is unaffected — still the current content.
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({
+      content: "example.com, 1, DIRECT\nother-editor.com, 9, RESELLER",
+    });
+  });
+
   it("shows an error message when the property fails to load", async () => {
     const store = new FakeVersionStore([]);
     const container = document.createElement("div");

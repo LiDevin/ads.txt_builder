@@ -8,6 +8,9 @@ export interface PropertySummary {
 
 export interface PropertyDetail extends PropertySummary {
   content: string;
+  // Opaque token identifying this exact content, to pass back to saveVersion
+  // for optimistic-concurrency checks. Not a version ref usable with getVersion.
+  baseVersion: string;
 }
 
 export interface VersionSummary {
@@ -30,7 +33,7 @@ export interface VersionStore {
   getVersion(propertyId: string, versionRef: string): Promise<PropertyVersion>;
   setToken(token: string | null): void;
   checkAccess(): Promise<AccessLevel>;
-  saveVersion(propertyId: string, content: string, comment: string): Promise<PropertyVersion>;
+  saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion>;
 }
 
 export class PropertyNotFoundError extends Error {
@@ -47,5 +50,14 @@ export class VersionNotFoundError extends Error {
   ) {
     super(`Version not found: ${versionRef} for property ${propertyId}`);
     this.name = "VersionNotFoundError";
+  }
+}
+
+export const CONFLICT_MESSAGE = "This property changed since you started editing";
+
+export class SaveConflictError extends Error {
+  constructor(public readonly propertyId: string) {
+    super(`${CONFLICT_MESSAGE}: ${propertyId}`);
+    this.name = "SaveConflictError";
   }
 }

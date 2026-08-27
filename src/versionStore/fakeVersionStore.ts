@@ -7,7 +7,7 @@ import type {
   VersionStore,
   VersionSummary,
 } from "./types";
-import { PropertyNotFoundError, VersionNotFoundError } from "./types";
+import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
 
 export interface FakeProperty {
   id: string;
@@ -60,7 +60,13 @@ export class FakeVersionStore implements VersionStore {
   async getProperty(id: string): Promise<PropertyDetail> {
     const property = this.findProperty(id);
     const [current] = property.versions;
-    return { id: property.id, name: property.name, type: property.type, content: current.content };
+    return {
+      id: property.id,
+      name: property.name,
+      type: property.type,
+      content: current.content,
+      baseVersion: current.ref,
+    };
   }
 
   async listVersions(propertyId: string): Promise<VersionSummary[]> {
@@ -77,10 +83,13 @@ export class FakeVersionStore implements VersionStore {
     return version;
   }
 
-  async saveVersion(propertyId: string, content: string, comment: string): Promise<PropertyVersion> {
+  async saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion> {
     const property = this.findProperty(propertyId);
     if (this.accessLevel !== "can-write") {
       throw new Error("This token does not have write access to save changes.");
+    }
+    if (property.versions[0].ref !== baseVersion) {
+      throw new SaveConflictError(propertyId);
     }
 
     const newVersion: PropertyVersion = {

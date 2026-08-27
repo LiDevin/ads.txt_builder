@@ -1,4 +1,4 @@
-import type { VersionStore } from "../versionStore/types";
+import { CONFLICT_MESSAGE, SaveConflictError, type VersionStore } from "../versionStore/types";
 import { appendLink } from "./domHelpers";
 import { diffLines } from "./diffLines";
 import { propertyHash } from "./routes";
@@ -13,6 +13,7 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
   }
 
   const originalContent = property.content;
+  const baseVersion = property.baseVersion;
 
   container.innerHTML = "";
 
@@ -50,18 +51,22 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
   reviewSection.className = "edit-review";
   container.appendChild(reviewSection);
 
-  function renderDiff(): void {
-    reviewSection.innerHTML = "";
-
+  function appendDiff(target: HTMLElement, before: string, after: string): void {
     const diff = document.createElement("div");
     diff.className = "diff";
-    for (const line of diffLines(originalContent, textarea.value)) {
+    for (const line of diffLines(before, after)) {
       const lineEl = document.createElement("div");
       lineEl.className = `diff-line diff-${line.type}`;
       lineEl.textContent = line.text;
       diff.appendChild(lineEl);
     }
-    reviewSection.appendChild(diff);
+    target.appendChild(diff);
+  }
+
+  function renderDiff(): void {
+    reviewSection.innerHTML = "";
+
+    appendDiff(reviewSection, originalContent, textarea.value);
 
     const confirmButton = document.createElement("button");
     confirmButton.type = "button";
@@ -80,11 +85,26 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
     reviewSection.appendChild(backButton);
   }
 
+  async function showConflict(): Promise<void> {
+    const latest = await tryLoad(reviewSection, () => store.getProperty(propertyId), "Failed to load the latest version");
+    if (!latest) {
+      return;
+    }
+
+    reviewSection.innerHTML = "";
+    errorMessage.textContent = `${CONFLICT_MESSAGE}. Here's what changed:`;
+    appendDiff(reviewSection, originalContent, latest.content);
+  }
+
   async function confirmSave(): Promise<void> {
     errorMessage.textContent = "";
     try {
-      await store.saveVersion(propertyId, textarea.value, commentInput.value);
+      await store.saveVersion(propertyId, textarea.value, commentInput.value, baseVersion);
     } catch (error) {
+      if (error instanceof SaveConflictError) {
+        await showConflict();
+        return;
+      }
       errorMessage.textContent = `Failed to save: ${(error as Error).message}`;
       return;
     }

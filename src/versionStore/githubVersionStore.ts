@@ -1,6 +1,6 @@
 import { GITHUB_OWNER, GITHUB_REPO, MANIFEST_PATH, contentPath } from "../config";
 import type { AccessLevel, PropertyDetail, PropertySummary, PropertyVersion, VersionStore, VersionSummary } from "./types";
-import { PropertyNotFoundError, VersionNotFoundError } from "./types";
+import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
 
 const API_ROOT = "https://api.github.com";
 const ACCEPT_HEADER = "application/vnd.github+json";
@@ -67,6 +67,12 @@ async function githubFetch(url: URL, token: string | null, init?: GitHubRequestI
   return fetch(url.toString(), { method: init?.method, headers, body: init?.body });
 }
 
+function throwIfFailed(response: Response, description: string): void {
+  if (!response.ok) {
+    throw new Error(`GitHub API request failed (${response.status}) for ${description}`);
+  }
+}
+
 async function githubApiRequest(
   url: URL,
   description: string,
@@ -74,9 +80,7 @@ async function githubApiRequest(
   init?: GitHubRequestInit,
 ): Promise<unknown> {
   const response = await githubFetch(url, token, init);
-  if (!response.ok) {
-    throw new Error(`GitHub API request failed (${response.status}) for ${description}`);
-  }
+  throwIfFailed(response, description);
   return response.json();
 }
 
@@ -132,8 +136,8 @@ export class GitHubVersionStore implements VersionStore {
     if (!summary) {
       throw new PropertyNotFoundError(id);
     }
-    const content = await fetchFileContent(contentPath(id), this.token);
-    return { ...summary, content };
+    const { content, sha } = await fetchFileMeta(contentPath(id), this.token);
+    return { ...summary, content, baseVersion: sha };
   }
 
   async listVersions(propertyId: string): Promise<VersionSummary[]> {
@@ -156,23 +160,24 @@ export class GitHubVersionStore implements VersionStore {
     if (response.status === 401) {
       return "invalid-token";
     }
-    if (!response.ok) {
-      throw new Error(`GitHub API request failed (${response.status}) for repository access check`);
-    }
+    throwIfFailed(response, "repository access check");
 
     const body = (await response.json()) as { permissions?: { push?: boolean } };
     return body.permissions?.push ? "can-write" : "no-write";
   }
 
-  async saveVersion(propertyId: string, content: string, comment: string): Promise<PropertyVersion> {
+  async saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion> {
     const path = contentPath(propertyId);
-    const { sha: currentSha } = await fetchFileMeta(path, this.token);
+    const url = repoApiUrl(`/contents/${path}`);
+    const requestBody = JSON.stringify({ message: comment, content: encodeBase64Utf8(content), sha: baseVersion });
 
-    const body = (await githubApiRequest(repoApiUrl(`/contents/${path}`), `saving ${path}`, this.token, {
-      method: "PUT",
-      body: JSON.stringify({ message: comment, content: encodeBase64Utf8(content), sha: currentSha }),
-    })) as { commit: GitHubPutCommit };
+    const response = await githubFetch(url, this.token, { method: "PUT", body: requestBody });
+    if (response.status === 409) {
+      throw new SaveConflictError(propertyId);
+    }
+    throwIfFailed(response, `saving ${path}`);
 
+    const body = (await response.json()) as { commit: GitHubPutCommit };
     return {
       ref: body.commit.sha,
       comment: body.commit.message,
