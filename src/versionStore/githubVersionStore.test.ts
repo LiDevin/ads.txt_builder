@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GitHubVersionStore } from "./githubVersionStore";
-import { PropertyNotFoundError } from "./types";
+import { PropertyNotFoundError, VersionNotFoundError } from "./types";
 
 function encodeBase64Utf8(text: string): string {
   const bytes = new TextEncoder().encode(text);
@@ -21,6 +21,23 @@ function githubContentsResponse(text: string) {
 
 function failedResponse(status: number) {
   return { ok: false, status, json: async () => ({}) };
+}
+
+function githubCommitsResponse(
+  commits: { sha: string; message: string; authorName: string; date: string }[],
+) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () =>
+      commits.map((commit) => ({
+        sha: commit.sha,
+        commit: {
+          message: commit.message,
+          author: { name: commit.authorName, date: commit.date },
+        },
+      })),
+  };
 }
 
 function stubFetch(...responses: unknown[]): ReturnType<typeof vi.fn> {
@@ -92,5 +109,68 @@ describe("GitHubVersionStore", () => {
     stubFetch(failedResponse(500));
 
     await expect(new GitHubVersionStore().listProperties()).rejects.toThrow(/GitHub API request failed \(500\)/);
+  });
+
+  it("lists a property's versions from its commit history, newest first", async () => {
+    const fetchMock = stubFetch(
+      githubCommitsResponse([
+        { sha: "sha-2", message: "Add reseller line", authorName: "Sam", date: "2026-08-28T09:00:00Z" },
+        { sha: "sha-1", message: "Initial version", authorName: "Alex", date: "2026-08-27T10:00:00Z" },
+      ]),
+    );
+
+    const versions = await new GitHubVersionStore().listVersions("example-oo");
+
+    expect(versions).toEqual([
+      { ref: "sha-2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z" },
+      { ref: "sha-1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z" },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/commits\?.*path=data%2Fproperties%2Fexample-oo%2Fcontent\.txt/),
+      expect.any(Object),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/per_page=100/), expect.any(Object));
+  });
+
+  it("gets a specific past version's content by its ref", async () => {
+    stubFetch(
+      githubCommitsResponse([
+        { sha: "sha-2", message: "Add reseller line", authorName: "Sam", date: "2026-08-28T09:00:00Z" },
+        { sha: "sha-1", message: "Initial version", authorName: "Alex", date: "2026-08-27T10:00:00Z" },
+      ]),
+      githubContentsResponse("example.com, 1, DIRECT\n"),
+    );
+
+    const version = await new GitHubVersionStore().getVersion("example-oo", "sha-1");
+
+    expect(version).toEqual({
+      ref: "sha-1",
+      comment: "Initial version",
+      author: "Alex",
+      timestamp: "2026-08-27T10:00:00Z",
+      content: "example.com, 1, DIRECT\n",
+    });
+  });
+
+  it("fetches a past version's content pinned to its commit ref", async () => {
+    const fetchMock = stubFetch(
+      githubCommitsResponse([{ sha: "sha-1", message: "Initial version", authorName: "Alex", date: "2026-08-27T10:00:00Z" }]),
+      githubContentsResponse("example.com, 1, DIRECT\n"),
+    );
+
+    await new GitHubVersionStore().getVersion("example-oo", "sha-1");
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/contents\/data\/properties\/example-oo\/content\.txt\?ref=sha-1/),
+      expect.any(Object),
+    );
+  });
+
+  it("throws VersionNotFoundError when the ref is missing from the commit history", async () => {
+    stubFetch(githubCommitsResponse([]));
+
+    await expect(new GitHubVersionStore().getVersion("example-oo", "missing")).rejects.toBeInstanceOf(
+      VersionNotFoundError,
+    );
   });
 });

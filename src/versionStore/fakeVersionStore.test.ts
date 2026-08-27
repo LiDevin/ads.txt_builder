@@ -1,26 +1,41 @@
 import { describe, expect, it } from "vitest";
 import { FakeVersionStore } from "./fakeVersionStore";
-import { PropertyNotFoundError } from "./types";
+import { PropertyNotFoundError, VersionNotFoundError } from "./types";
+
+const oneVersionProperty = {
+  id: "oo-1",
+  name: "Main Site",
+  type: "OO" as const,
+  versions: [
+    { ref: "sha-1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z", content: "example.com, 1, DIRECT" },
+  ],
+};
+
+const twoVersionProperty = {
+  id: "oo-2",
+  name: "Other Site",
+  type: "OO" as const,
+  versions: [
+    { ref: "sha-2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z", content: "other.com, 2, DIRECT\nreseller.com, 3, RESELLER" },
+    { ref: "sha-1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z", content: "other.com, 2, DIRECT" },
+  ],
+};
 
 describe("FakeVersionStore", () => {
   it("lists properties without their content", async () => {
-    const store = new FakeVersionStore([
-      { id: "oo-1", name: "Main Site", type: "OO", content: "example.com, 1, DIRECT" },
-    ]);
+    const store = new FakeVersionStore([oneVersionProperty]);
 
     await expect(store.listProperties()).resolves.toEqual([{ id: "oo-1", name: "Main Site", type: "OO" }]);
   });
 
-  it("gets a single property including its content", async () => {
-    const store = new FakeVersionStore([
-      { id: "oo-1", name: "Main Site", type: "OO", content: "example.com, 1, DIRECT" },
-    ]);
+  it("gets a property's current (most recent) content", async () => {
+    const store = new FakeVersionStore([twoVersionProperty]);
 
-    await expect(store.getProperty("oo-1")).resolves.toEqual({
-      id: "oo-1",
-      name: "Main Site",
+    await expect(store.getProperty("oo-2")).resolves.toEqual({
+      id: "oo-2",
+      name: "Other Site",
       type: "OO",
-      content: "example.com, 1, DIRECT",
+      content: "other.com, 2, DIRECT\nreseller.com, 3, RESELLER",
     });
   });
 
@@ -28,5 +43,38 @@ describe("FakeVersionStore", () => {
     const store = new FakeVersionStore([]);
 
     await expect(store.getProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("lists versions newest first, without content", async () => {
+    const store = new FakeVersionStore([twoVersionProperty]);
+
+    await expect(store.listVersions("oo-2")).resolves.toEqual([
+      { ref: "sha-2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z" },
+      { ref: "sha-1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z" },
+    ]);
+  });
+
+  it("throws PropertyNotFoundError when listing versions of an unknown property", async () => {
+    const store = new FakeVersionStore([]);
+
+    await expect(store.listVersions("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("gets a specific past version's content", async () => {
+    const store = new FakeVersionStore([twoVersionProperty]);
+
+    await expect(store.getVersion("oo-2", "sha-1")).resolves.toEqual({
+      ref: "sha-1",
+      comment: "Initial version",
+      author: "Alex",
+      timestamp: "2026-08-27T10:00:00Z",
+      content: "other.com, 2, DIRECT",
+    });
+  });
+
+  it("throws VersionNotFoundError for an unknown version ref", async () => {
+    const store = new FakeVersionStore([oneVersionProperty]);
+
+    await expect(store.getVersion("oo-1", "does-not-exist")).rejects.toBeInstanceOf(VersionNotFoundError);
   });
 });

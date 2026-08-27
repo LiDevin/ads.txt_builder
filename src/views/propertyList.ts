@@ -1,14 +1,12 @@
 import type { VersionStore } from "../versionStore/types";
 import { propertyTypeLabel } from "./propertyTypeLabel";
+import { tryLoad } from "./tryLoad";
 
 export async function renderPropertyList(container: HTMLElement, store: VersionStore): Promise<void> {
   container.innerHTML = "<p>Loading properties…</p>";
 
-  let properties;
-  try {
-    properties = await store.listProperties();
-  } catch (error) {
-    container.innerHTML = `<p role="alert">Failed to load properties: ${(error as Error).message}</p>`;
+  const properties = await tryLoad(container, () => store.listProperties(), "Failed to load properties");
+  if (!properties) {
     return;
   }
 

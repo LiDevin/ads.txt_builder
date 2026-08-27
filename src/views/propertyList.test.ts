@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { renderPropertyList } from "./propertyList";
 import { FakeVersionStore } from "../versionStore/fakeVersionStore";
+import type { VersionStore } from "../versionStore/types";
 
 describe("renderPropertyList", () => {
   it("renders a link and type label for each property", async () => {
     const store = new FakeVersionStore([
-      { id: "oo-1", name: "Main Site", type: "OO", content: "" },
-      { id: "partner-1", name: "Acme Partner", type: "PARTNER", content: "" },
+      { id: "oo-1", name: "Main Site", type: "OO", versions: [{ ref: "sha-1", comment: "", author: "", timestamp: "", content: "" }] },
+      { id: "partner-1", name: "Acme Partner", type: "PARTNER", versions: [{ ref: "sha-1", comment: "", author: "", timestamp: "", content: "" }] },
     ]);
     const container = document.createElement("div");
 
@@ -31,9 +32,11 @@ describe("renderPropertyList", () => {
   });
 
   it("shows an error message when loading fails", async () => {
-    const failingStore = {
+    const failingStore: VersionStore = {
       listProperties: () => Promise.reject(new Error("network down")),
       getProperty: () => Promise.reject(new Error("not used")),
+      listVersions: () => Promise.reject(new Error("not used")),
+      getVersion: () => Promise.reject(new Error("not used")),
     };
     const container = document.createElement("div");
 
