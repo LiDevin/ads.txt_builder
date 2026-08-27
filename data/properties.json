@@ -1,0 +1,4 @@
+[
+  { "id": "example-oo-domain", "name": "example.com", "type": "OO" },
+  { "id": "example-partner", "name": "Example Ad Partner", "type": "PARTNER" }
+]
