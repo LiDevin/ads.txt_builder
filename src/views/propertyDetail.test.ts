@@ -101,4 +101,45 @@ describe("renderPropertyDetail", () => {
 
     expect(container.textContent).toContain("not found");
   });
+
+  it("shows a Download action for an O&O property's current version, named ads.txt", async () => {
+    const store = new FakeVersionStore([property]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const downloadLink = container.querySelector("a[download]") as HTMLAnchorElement | null;
+    expect(downloadLink?.getAttribute("download")).toBe("ads.txt");
+    expect(decodeURIComponent(downloadLink!.href.split(",")[1])).toBe(
+      "example.com, 1, DIRECT\nreseller.com, 2, RESELLER",
+    );
+  });
+
+  it("shows a Download action for a Partner property's current version, named from its slugified name", async () => {
+    const partnerProperty = {
+      id: "partner-1",
+      name: "Acme Ad Partner",
+      type: "PARTNER" as const,
+      versions: [
+        { ref: "sha-1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z", content: "ourcompany.example, 1, RESELLER" },
+      ],
+    };
+    const store = new FakeVersionStore([partnerProperty]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "partner-1");
+
+    const downloadLink = container.querySelector("a[download]") as HTMLAnchorElement | null;
+    expect(downloadLink?.getAttribute("download")).toBe("acme-ad-partner-ads.txt-lines.txt");
+    expect(decodeURIComponent(downloadLink!.href.split(",")[1])).toBe("ourcompany.example, 1, RESELLER");
+  });
+
+  it("does not show a Download action when viewing a past version", async () => {
+    const store = new FakeVersionStore([property]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1", "sha-1");
+
+    expect(container.querySelector("a[download]")).toBeNull();
+  });
 });

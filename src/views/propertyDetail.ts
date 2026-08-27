@@ -1,4 +1,5 @@
 import type { VersionStore } from "../versionStore/types";
+import { downloadFilename, toDownloadHref } from "./download";
 import { propertyTypeLabel } from "./propertyTypeLabel";
 import { tryLoad } from "./tryLoad";
 
@@ -8,6 +9,16 @@ function propertyHash(propertyId: string): string {
 
 function versionHash(propertyId: string, versionRef: string): string {
   return `${propertyHash(propertyId)}/version/${encodeURIComponent(versionRef)}`;
+}
+
+function appendLink(parent: HTMLElement, href: string, text: string, options?: { download?: string }): void {
+  const link = document.createElement("a");
+  link.href = href;
+  link.textContent = text;
+  if (options?.download) {
+    link.download = options.download;
+  }
+  parent.appendChild(link);
 }
 
 export async function renderPropertyDetail(
@@ -40,10 +51,7 @@ export async function renderPropertyDetail(
 
   container.innerHTML = "";
 
-  const backLink = document.createElement("a");
-  backLink.href = "#/";
-  backLink.textContent = "← Back to properties";
-  container.appendChild(backLink);
+  appendLink(container, "#/", "← Back to properties");
 
   const heading = document.createElement("h1");
   heading.textContent = property.name;
@@ -59,10 +67,11 @@ export async function renderPropertyDetail(
     notice.textContent = "Viewing a past version.";
     container.appendChild(notice);
 
-    const currentLink = document.createElement("a");
-    currentLink.href = propertyHash(propertyId);
-    currentLink.textContent = "View current version";
-    container.appendChild(currentLink);
+    appendLink(container, propertyHash(propertyId), "View current version");
+  } else {
+    appendLink(container, toDownloadHref(property.content), "Download .txt", {
+      download: downloadFilename(property),
+    });
   }
 
   const content = document.createElement("pre");
@@ -80,10 +89,7 @@ export async function renderPropertyDetail(
   for (const version of versions) {
     const item = document.createElement("li");
 
-    const link = document.createElement("a");
-    link.href = versionHash(propertyId, version.ref);
-    link.textContent = version.timestamp;
-    item.appendChild(link);
+    appendLink(item, versionHash(propertyId, version.ref), version.timestamp);
 
     const comment = document.createElement("span");
     comment.className = "version-comment";
