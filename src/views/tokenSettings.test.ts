@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { renderTokenSettings } from "./tokenSettings";
 import { FakeVersionStore } from "../versionStore/fakeVersionStore";
+import { createFailingVersionStore } from "../versionStore/testHelpers";
 import { clearToken, loadToken, saveToken } from "../auth/tokenStore";
-import type { VersionStore } from "../versionStore/types";
 
 function submitForm(container: HTMLElement, tokenValue: string): void {
   const input = container.querySelector("input") as HTMLInputElement;
@@ -103,14 +103,9 @@ describe("renderTokenSettings", () => {
   });
 
   it("shows an error message when the access check fails unexpectedly", async () => {
-    const failingStore: VersionStore = {
-      listProperties: () => Promise.reject(new Error("not used")),
-      getProperty: () => Promise.reject(new Error("not used")),
-      listVersions: () => Promise.reject(new Error("not used")),
-      getVersion: () => Promise.reject(new Error("not used")),
-      setToken: () => {},
+    const failingStore = createFailingVersionStore({
       checkAccess: () => Promise.reject(new Error("network down")),
-    };
+    });
     const container = document.createElement("div");
     await renderTokenSettings(container, failingStore);
 

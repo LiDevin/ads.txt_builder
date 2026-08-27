@@ -1,25 +1,9 @@
 import type { VersionStore } from "../versionStore/types";
+import { appendLink } from "./domHelpers";
 import { downloadFilename, toDownloadHref } from "./download";
 import { propertyTypeLabel } from "./propertyTypeLabel";
+import { editHash, propertyHash, versionHash } from "./routes";
 import { tryLoad } from "./tryLoad";
-
-function propertyHash(propertyId: string): string {
-  return `#/property/${encodeURIComponent(propertyId)}`;
-}
-
-function versionHash(propertyId: string, versionRef: string): string {
-  return `${propertyHash(propertyId)}/version/${encodeURIComponent(versionRef)}`;
-}
-
-function appendLink(parent: HTMLElement, href: string, text: string, options?: { download?: string }): void {
-  const link = document.createElement("a");
-  link.href = href;
-  link.textContent = text;
-  if (options?.download) {
-    link.download = options.download;
-  }
-  parent.appendChild(link);
-}
 
 export async function renderPropertyDetail(
   container: HTMLElement,
@@ -69,6 +53,7 @@ export async function renderPropertyDetail(
 
     appendLink(container, propertyHash(propertyId), "View current version");
   } else {
+    appendLink(container, editHash(propertyId), "Edit");
     appendLink(container, toDownloadHref(property.content), "Download .txt", {
       download: downloadFilename(property),
     });

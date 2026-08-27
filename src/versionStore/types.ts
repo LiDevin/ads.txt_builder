@@ -30,6 +30,7 @@ export interface VersionStore {
   getVersion(propertyId: string, versionRef: string): Promise<PropertyVersion>;
   setToken(token: string | null): void;
   checkAccess(): Promise<AccessLevel>;
+  saveVersion(propertyId: string, content: string, comment: string): Promise<PropertyVersion>;
 }
 
 export class PropertyNotFoundError extends Error {

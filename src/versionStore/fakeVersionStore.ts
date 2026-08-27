@@ -28,12 +28,12 @@ function toSummary({ content: _content, ...summary }: PropertyVersion): VersionS
 // In-memory stand-in for GitHubVersionStore, used in tests instead of a real network call.
 export class FakeVersionStore implements VersionStore {
   public lastToken: string | null = null;
+  private readonly properties: FakeProperty[];
   private readonly accessLevel: AccessLevel;
 
-  constructor(
-    private readonly properties: FakeProperty[],
-    options: FakeVersionStoreOptions = {},
-  ) {
+  constructor(properties: FakeProperty[], options: FakeVersionStoreOptions = {}) {
+    // Clone so saveVersion's mutations never leak back into the caller's fixtures.
+    this.properties = properties.map((property) => ({ ...property, versions: [...property.versions] }));
     this.accessLevel = options.accessLevel ?? "no-write";
   }
 
@@ -75,5 +75,22 @@ export class FakeVersionStore implements VersionStore {
       throw new VersionNotFoundError(propertyId, versionRef);
     }
     return version;
+  }
+
+  async saveVersion(propertyId: string, content: string, comment: string): Promise<PropertyVersion> {
+    const property = this.findProperty(propertyId);
+    if (this.accessLevel !== "can-write") {
+      throw new Error("This token does not have write access to save changes.");
+    }
+
+    const newVersion: PropertyVersion = {
+      ref: `fake-sha-${property.versions.length + 1}`,
+      comment,
+      author: "Fake User",
+      timestamp: new Date().toISOString(),
+      content,
+    };
+    property.versions.unshift(newVersion);
+    return newVersion;
   }
 }

@@ -2,9 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GitHubVersionStore } from "./githubVersionStore";
 import { PropertyNotFoundError, VersionNotFoundError } from "./types";
 
-function authHeader(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0): string | undefined {
+function requestInit(fetchMock: ReturnType<typeof vi.fn>, callIndex: number): RequestInit & { headers: Record<string, string> } {
   const [, init] = fetchMock.mock.calls[callIndex] as [string, RequestInit & { headers: Record<string, string> }];
-  return init.headers.Authorization;
+  return init;
+}
+
+function authHeader(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0): string | undefined {
+  return requestInit(fetchMock, callIndex).headers.Authorization;
 }
 
 function encodeBase64Utf8(text: string): string {
@@ -13,15 +17,44 @@ function encodeBase64Utf8(text: string): string {
   return btoa(binary);
 }
 
-function githubContentsResponse(text: string) {
+function decodeBase64Utf8(base64: string): string {
+  const binary = atob(base64);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function githubContentsResponse(text: string, sha = "blob-sha") {
   return {
     ok: true,
     status: 200,
     json: async () => ({
       content: encodeBase64Utf8(text),
       encoding: "base64",
+      sha,
     }),
   };
+}
+
+function githubPutResponse(commit: { sha: string; message: string; authorName: string; date: string }) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      commit: {
+        sha: commit.sha,
+        message: commit.message,
+        author: { name: commit.authorName, date: commit.date },
+      },
+    }),
+  };
+}
+
+function requestBody(fetchMock: ReturnType<typeof vi.fn>, callIndex: number): Record<string, unknown> {
+  return JSON.parse(requestInit(fetchMock, callIndex).body as string) as Record<string, unknown>;
+}
+
+function requestMethod(fetchMock: ReturnType<typeof vi.fn>, callIndex: number): string | undefined {
+  return requestInit(fetchMock, callIndex).method;
 }
 
 function failedResponse(status: number) {
@@ -243,5 +276,52 @@ describe("GitHubVersionStore", () => {
     store.setToken("my-token");
 
     await expect(store.checkAccess()).rejects.toThrow(/GitHub API request failed \(500\)/);
+  });
+
+  it("saves a new version via a PUT to the Contents API, returning the resulting commit", async () => {
+    stubFetch(
+      githubContentsResponse("example.com, 1, DIRECT\n", "current-blob-sha"),
+      githubPutResponse({ sha: "new-sha", message: "Add reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    const version = await store.saveVersion("example-oo", "example.com, 1, DIRECT\nreseller.com, 2, RESELLER\n", "Add reseller");
+
+    expect(version).toEqual({
+      ref: "new-sha",
+      comment: "Add reseller",
+      author: "Alex",
+      timestamp: "2026-08-29T12:00:00Z",
+      content: "example.com, 1, DIRECT\nreseller.com, 2, RESELLER\n",
+    });
+  });
+
+  it("PUTs the new content, comment, and current blob sha, authenticated with the token", async () => {
+    const fetchMock = stubFetch(
+      githubContentsResponse("old content", "current-blob-sha"),
+      githubPutResponse({ sha: "new-sha", message: "Add reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await store.saveVersion("example-oo", "new content", "Add reseller");
+
+    expect(requestMethod(fetchMock, 1)).toBe("PUT");
+    expect(authHeader(fetchMock, 1)).toBe("Bearer my-token");
+    const body = requestBody(fetchMock, 1);
+    expect(body.message).toBe("Add reseller");
+    expect(body.sha).toBe("current-blob-sha");
+    expect(decodeBase64Utf8(body.content as string)).toBe("new content");
+  });
+
+  it("throws when the save is rejected (e.g. no write access), without pretending it succeeded", async () => {
+    stubFetch(githubContentsResponse("old content", "current-blob-sha"), failedResponse(403));
+    const store = new GitHubVersionStore();
+    store.setToken("read-only-token");
+
+    await expect(store.saveVersion("example-oo", "new content", "Add reseller")).rejects.toThrow(
+      /GitHub API request failed \(403\)/,
+    );
   });
 });

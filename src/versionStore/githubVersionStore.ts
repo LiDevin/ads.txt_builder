@@ -5,18 +5,46 @@ import { PropertyNotFoundError, VersionNotFoundError } from "./types";
 const API_ROOT = "https://api.github.com";
 const ACCEPT_HEADER = "application/vnd.github+json";
 
+interface GitHubAuthor {
+  name: string;
+  date: string;
+}
+
 interface GitHubCommit {
   sha: string;
   commit: {
     message: string;
-    author: { name: string; date: string } | null;
+    author: GitHubAuthor | null;
   };
+}
+
+// Shape of the "commit" field in a Contents API PUT response — flatter than
+// the list-commits shape above (message/author sit directly on it).
+interface GitHubPutCommit {
+  sha: string;
+  message: string;
+  author: GitHubAuthor | null;
+}
+
+interface GitHubRequestInit {
+  method?: string;
+  body?: string;
+}
+
+function authorFields(author: GitHubAuthor | null): { author: string; timestamp: string } {
+  return { author: author?.name ?? "Unknown", timestamp: author?.date ?? "" };
 }
 
 function decodeBase64Utf8(base64: string): string {
   const binary = atob(base64.replace(/\n/g, ""));
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder("utf-8").decode(bytes);
+}
+
+function encodeBase64Utf8(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+  return btoa(binary);
 }
 
 function repoApiUrl(pathSuffix: string): URL {
@@ -31,29 +59,42 @@ function buildHeaders(token: string | null): Record<string, string> {
   return headers;
 }
 
-async function githubFetch(url: URL, token: string | null): Promise<Response> {
-  return fetch(url.toString(), { headers: buildHeaders(token) });
+async function githubFetch(url: URL, token: string | null, init?: GitHubRequestInit): Promise<Response> {
+  const headers = buildHeaders(token);
+  if (init?.body) {
+    headers["Content-Type"] = "application/json";
+  }
+  return fetch(url.toString(), { method: init?.method, headers, body: init?.body });
 }
 
-async function githubApiRequest(url: URL, description: string, token: string | null): Promise<unknown> {
-  const response = await githubFetch(url, token);
+async function githubApiRequest(
+  url: URL,
+  description: string,
+  token: string | null,
+  init?: GitHubRequestInit,
+): Promise<unknown> {
+  const response = await githubFetch(url, token, init);
   if (!response.ok) {
     throw new Error(`GitHub API request failed (${response.status}) for ${description}`);
   }
   return response.json();
 }
 
-async function fetchFileContent(path: string, token: string | null, ref?: string): Promise<string> {
+async function fetchFileMeta(path: string, token: string | null, ref?: string): Promise<{ content: string; sha: string }> {
   const url = repoApiUrl(`/contents/${path}`);
   if (ref) {
     url.searchParams.set("ref", ref);
   }
 
-  const body = (await githubApiRequest(url, path, token)) as { content: string; encoding: string };
+  const body = (await githubApiRequest(url, path, token)) as { content: string; encoding: string; sha: string };
   if (body.encoding !== "base64") {
     throw new Error(`Unexpected encoding "${body.encoding}" for ${path}`);
   }
-  return decodeBase64Utf8(body.content);
+  return { content: decodeBase64Utf8(body.content), sha: body.sha };
+}
+
+async function fetchFileContent(path: string, token: string | null, ref?: string): Promise<string> {
+  return (await fetchFileMeta(path, token, ref)).content;
 }
 
 async function fetchCommitHistory(path: string, token: string | null): Promise<VersionSummary[]> {
@@ -67,8 +108,7 @@ async function fetchCommitHistory(path: string, token: string | null): Promise<V
   return commits.map((commit) => ({
     ref: commit.sha,
     comment: commit.commit.message,
-    author: commit.commit.author?.name ?? "Unknown",
-    timestamp: commit.commit.author?.date ?? "",
+    ...authorFields(commit.commit.author),
   }));
 }
 
@@ -122,5 +162,22 @@ export class GitHubVersionStore implements VersionStore {
 
     const body = (await response.json()) as { permissions?: { push?: boolean } };
     return body.permissions?.push ? "can-write" : "no-write";
+  }
+
+  async saveVersion(propertyId: string, content: string, comment: string): Promise<PropertyVersion> {
+    const path = contentPath(propertyId);
+    const { sha: currentSha } = await fetchFileMeta(path, this.token);
+
+    const body = (await githubApiRequest(repoApiUrl(`/contents/${path}`), `saving ${path}`, this.token, {
+      method: "PUT",
+      body: JSON.stringify({ message: comment, content: encodeBase64Utf8(content), sha: currentSha }),
+    })) as { commit: GitHubPutCommit };
+
+    return {
+      ref: body.commit.sha,
+      comment: body.commit.message,
+      ...authorFields(body.commit.author),
+      content,
+    };
   }
 }

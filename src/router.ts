@@ -1,9 +1,11 @@
 import type { VersionStore } from "./versionStore/types";
 import { renderPropertyDetail } from "./views/propertyDetail";
+import { renderPropertyEdit } from "./views/propertyEdit";
 import { renderPropertyList } from "./views/propertyList";
 import { renderTokenSettings } from "./views/tokenSettings";
 
 const PROPERTY_VERSION_ROUTE = /^#\/property\/([^/]+)\/version\/(.+)$/;
+const PROPERTY_EDIT_ROUTE = /^#\/property\/([^/]+)\/edit$/;
 const PROPERTY_ROUTE = /^#\/property\/([^/]+)$/;
 
 export function startRouter(container: HTMLElement, store: VersionStore): void {
@@ -12,6 +14,12 @@ export function startRouter(container: HTMLElement, store: VersionStore): void {
 
     if (hash === "#/settings") {
       void renderTokenSettings(container, store);
+      return;
+    }
+
+    const editMatch = hash.match(PROPERTY_EDIT_ROUTE);
+    if (editMatch) {
+      void renderPropertyEdit(container, store, decodeURIComponent(editMatch[1]));
       return;
     }
 

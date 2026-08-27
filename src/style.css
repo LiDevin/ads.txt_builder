@@ -70,3 +70,44 @@ body {
 .token-status {
   font-weight: 500;
 }
+
+.edit-content {
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  box-sizing: border-box;
+  font-family: ui-monospace, monospace;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.edit-comment {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.diff {
+  font-family: ui-monospace, monospace;
+  white-space: pre-wrap;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 0.5rem 0;
+  margin: 0.75rem 0;
+}
+
+.diff-line {
+  padding: 0 0.75rem;
+}
+
+.diff-added {
+  background: #e6ffed;
+  color: #22863a;
+}
+
+.diff-removed {
+  background: #ffeef0;
+  color: #b31d28;
+}

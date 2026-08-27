@@ -99,4 +99,34 @@ describe("FakeVersionStore", () => {
     store.setToken(null);
     expect(store.lastToken).toBeNull();
   });
+
+  it("saves a new version, making it the current content and prepending it to history", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    const saved = await store.saveVersion("oo-1", "example.com, 1, DIRECT\nreseller.com, 2, RESELLER", "Add reseller");
+
+    expect(saved.comment).toBe("Add reseller");
+    expect(saved.content).toBe("example.com, 1, DIRECT\nreseller.com, 2, RESELLER");
+
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({
+      content: "example.com, 1, DIRECT\nreseller.com, 2, RESELLER",
+    });
+    await expect(store.listVersions("oo-1")).resolves.toEqual([
+      expect.objectContaining({ comment: "Add reseller" }),
+      expect.objectContaining({ comment: "Initial version" }),
+    ]);
+  });
+
+  it("throws when saving without can-write access, leaving the property unchanged", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
+
+    await expect(store.saveVersion("oo-1", "new content", "Attempted edit")).rejects.toThrow();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "example.com, 1, DIRECT" });
+  });
+
+  it("throws PropertyNotFoundError when saving to an unknown property", async () => {
+    const store = new FakeVersionStore([], { accessLevel: "can-write" });
+
+    await expect(store.saveVersion("missing", "content", "comment")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
 });
