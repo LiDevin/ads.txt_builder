@@ -34,12 +34,20 @@ export interface VersionStore {
   setToken(token: string | null): void;
   checkAccess(): Promise<AccessLevel>;
   saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion>;
+  createProperty(id: string, name: string, type: PropertyType, content: string): Promise<void>;
 }
 
 export class PropertyNotFoundError extends Error {
   constructor(public readonly propertyId: string) {
     super(`Property not found: ${propertyId}`);
     this.name = "PropertyNotFoundError";
+  }
+}
+
+export class PropertyAlreadyExistsError extends Error {
+  constructor(public readonly propertyId: string) {
+    super(`A property with id "${propertyId}" already exists`);
+    this.name = "PropertyAlreadyExistsError";
   }
 }
 

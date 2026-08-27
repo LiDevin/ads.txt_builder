@@ -7,7 +7,7 @@ import type {
   VersionStore,
   VersionSummary,
 } from "./types";
-import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
+import { PropertyAlreadyExistsError, PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
 
 export interface FakeProperty {
   id: string;
@@ -101,5 +101,29 @@ export class FakeVersionStore implements VersionStore {
     };
     property.versions.unshift(newVersion);
     return newVersion;
+  }
+
+  async createProperty(id: string, name: string, type: PropertyType, content: string): Promise<void> {
+    if (this.accessLevel !== "can-write") {
+      throw new Error("This token does not have write access to create properties.");
+    }
+    if (this.properties.some((property) => property.id === id)) {
+      throw new PropertyAlreadyExistsError(id);
+    }
+
+    this.properties.push({
+      id,
+      name,
+      type,
+      versions: [
+        {
+          ref: "fake-sha-1",
+          comment: "Initial version",
+          author: "Fake User",
+          timestamp: new Date().toISOString(),
+          content,
+        },
+      ],
+    });
   }
 }

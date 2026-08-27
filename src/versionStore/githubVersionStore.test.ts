@@ -339,4 +339,45 @@ describe("GitHubVersionStore", () => {
     ).rejects.toBeInstanceOf(SaveConflictError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("creates the content file (no sha) then adds the property to the manifest", async () => {
+    const existingManifest = [{ id: "example-oo", name: "Example O&O", type: "OO" }];
+    const fetchMock = stubFetch(
+      githubPutResponse({ sha: "content-sha", message: "Initial version", authorName: "Alex", date: "2026-08-30T09:00:00Z" }),
+      githubContentsResponse(JSON.stringify(existingManifest), "manifest-sha"),
+      githubPutResponse({ sha: "manifest-commit-sha", message: "Add property: New Partner", authorName: "Alex", date: "2026-08-30T09:00:01Z" }),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await store.createProperty("new-partner", "New Partner", "PARTNER", "ourcompany.example, 1, RESELLER");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    expect(requestMethod(fetchMock, 0)).toBe("PUT");
+    const contentBody = requestBody(fetchMock, 0);
+    expect(contentBody.sha).toBeUndefined();
+    expect(decodeBase64Utf8(contentBody.content as string)).toBe("ourcompany.example, 1, RESELLER");
+    expect(authHeader(fetchMock, 0)).toBe("Bearer my-token");
+
+    expect(requestMethod(fetchMock, 2)).toBe("PUT");
+    const manifestBody = requestBody(fetchMock, 2);
+    expect(manifestBody.sha).toBe("manifest-sha");
+    expect(JSON.parse(decodeBase64Utf8(manifestBody.content as string))).toEqual([
+      ...existingManifest,
+      { id: "new-partner", name: "New Partner", type: "PARTNER" },
+    ]);
+    expect(authHeader(fetchMock, 2)).toBe("Bearer my-token");
+  });
+
+  it("throws when creating the content file fails (e.g. no write access), without touching the manifest", async () => {
+    const fetchMock = stubFetch(failedResponse(403));
+    const store = new GitHubVersionStore();
+    store.setToken("read-only-token");
+
+    await expect(
+      store.createProperty("new-partner", "New Partner", "PARTNER", "content"),
+    ).rejects.toThrow(/GitHub API request failed \(403\)/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

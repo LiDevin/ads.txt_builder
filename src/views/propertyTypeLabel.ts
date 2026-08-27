@@ -1,6 +1,6 @@
 import type { PropertyType } from "../versionStore/types";
 
-const TYPE_LABELS: Record<PropertyType, string> = {
+export const TYPE_LABELS: Record<PropertyType, string> = {
   OO: "Owned & Operated",
   PARTNER: "Partner",
 };

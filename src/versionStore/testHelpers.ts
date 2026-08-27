@@ -11,6 +11,7 @@ export function createFailingVersionStore(overrides: Partial<VersionStore> = {})
     setToken: () => {},
     checkAccess: notUsed,
     saveVersion: notUsed,
+    createProperty: notUsed,
     ...overrides,
   };
 }

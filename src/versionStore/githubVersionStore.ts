@@ -1,5 +1,5 @@
 import { GITHUB_OWNER, GITHUB_REPO, MANIFEST_PATH, contentPath } from "../config";
-import type { AccessLevel, PropertyDetail, PropertySummary, PropertyVersion, VersionStore, VersionSummary } from "./types";
+import type { AccessLevel, PropertyDetail, PropertySummary, PropertyType, PropertyVersion, VersionStore, VersionSummary } from "./types";
 import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
 
 const API_ROOT = "https://api.github.com";
@@ -184,5 +184,30 @@ export class GitHubVersionStore implements VersionStore {
       ...authorFields(body.commit.author),
       content,
     };
+  }
+
+  async createProperty(id: string, name: string, type: PropertyType, content: string): Promise<void> {
+    // Create the content file first: if this fails (e.g. no write access), the
+    // manifest is never touched, so a property never appears without content.
+    const contentUrl = repoApiUrl(`/contents/${contentPath(id)}`);
+    const createResponse = await githubFetch(contentUrl, this.token, {
+      method: "PUT",
+      body: JSON.stringify({ message: "Initial version", content: encodeBase64Utf8(content) }),
+    });
+    throwIfFailed(createResponse, `creating ${contentPath(id)}`);
+
+    const manifest = await fetchFileMeta(MANIFEST_PATH, this.token);
+    const properties = JSON.parse(manifest.content) as PropertySummary[];
+    properties.push({ id, name, type });
+
+    const manifestResponse = await githubFetch(repoApiUrl(`/contents/${MANIFEST_PATH}`), this.token, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: `Add property: ${name}`,
+        content: encodeBase64Utf8(`${JSON.stringify(properties, null, 2)}\n`),
+        sha: manifest.sha,
+      }),
+    });
+    throwIfFailed(manifestResponse, "updating property manifest");
   }
 }

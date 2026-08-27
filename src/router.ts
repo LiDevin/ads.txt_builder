@@ -1,4 +1,5 @@
 import type { VersionStore } from "./versionStore/types";
+import { renderPropertyAdd } from "./views/propertyAdd";
 import { renderPropertyDetail } from "./views/propertyDetail";
 import { renderPropertyEdit } from "./views/propertyEdit";
 import { renderPropertyList } from "./views/propertyList";
@@ -14,6 +15,11 @@ export function startRouter(container: HTMLElement, store: VersionStore): void {
 
     if (hash === "#/settings") {
       void renderTokenSettings(container, store);
+      return;
+    }
+
+    if (hash === "#/add") {
+      renderPropertyAdd(container, store);
       return;
     }
 

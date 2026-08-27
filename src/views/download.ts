@@ -1,12 +1,5 @@
 import type { PropertySummary } from "../versionStore/types";
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+import { slugify } from "./slugify";
 
 export function downloadFilename(property: Pick<PropertySummary, "name" | "type">): string {
   if (property.type === "OO") {

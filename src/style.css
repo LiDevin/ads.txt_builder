@@ -81,7 +81,9 @@ body {
   margin: 0.75rem 0;
 }
 
-.edit-comment {
+.edit-comment,
+.add-name,
+.add-type {
   display: block;
   width: 100%;
   box-sizing: border-box;

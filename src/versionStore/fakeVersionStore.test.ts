@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeVersionStore } from "./fakeVersionStore";
-import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
+import { PropertyAlreadyExistsError, PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
 
 const oneVersionProperty = {
   id: "oo-1",
@@ -159,5 +159,36 @@ describe("FakeVersionStore", () => {
     ).rejects.toBeInstanceOf(SaveConflictError);
 
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "first editor's content" });
+  });
+
+  it("creates a new property with an initial version, immediately visible in the property list", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    await store.createProperty("new-partner", "New Partner", "PARTNER", "ourcompany.example, 1, RESELLER");
+
+    await expect(store.listProperties()).resolves.toContainEqual({
+      id: "new-partner",
+      name: "New Partner",
+      type: "PARTNER",
+    });
+    await expect(store.getProperty("new-partner")).resolves.toMatchObject({
+      content: "ourcompany.example, 1, RESELLER",
+    });
+    await expect(store.listVersions("new-partner")).resolves.toHaveLength(1);
+  });
+
+  it("throws when creating a property without can-write access, and does not add it", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
+
+    await expect(store.createProperty("new-partner", "New Partner", "PARTNER", "content")).rejects.toThrow();
+    await expect(store.getProperty("new-partner")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("throws PropertyAlreadyExistsError when the id is already in use", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    await expect(store.createProperty("oo-1", "Duplicate", "OO", "content")).rejects.toBeInstanceOf(
+      PropertyAlreadyExistsError,
+    );
   });
 });
