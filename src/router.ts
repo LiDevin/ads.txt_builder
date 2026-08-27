@@ -1,6 +1,7 @@
 import type { VersionStore } from "./versionStore/types";
 import { renderPropertyDetail } from "./views/propertyDetail";
 import { renderPropertyList } from "./views/propertyList";
+import { renderTokenSettings } from "./views/tokenSettings";
 
 const PROPERTY_VERSION_ROUTE = /^#\/property\/([^/]+)\/version\/(.+)$/;
 const PROPERTY_ROUTE = /^#\/property\/([^/]+)$/;
@@ -8,6 +9,11 @@ const PROPERTY_ROUTE = /^#\/property\/([^/]+)$/;
 export function startRouter(container: HTMLElement, store: VersionStore): void {
   const render = (): void => {
     const hash = window.location.hash || "#/";
+
+    if (hash === "#/settings") {
+      void renderTokenSettings(container, store);
+      return;
+    }
 
     const versionMatch = hash.match(PROPERTY_VERSION_ROUTE);
     if (versionMatch) {

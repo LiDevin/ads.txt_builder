@@ -21,11 +21,15 @@ export interface PropertyVersion extends VersionSummary {
   content: string;
 }
 
+export type AccessLevel = "invalid-token" | "no-write" | "can-write";
+
 export interface VersionStore {
   listProperties(): Promise<PropertySummary[]>;
   getProperty(id: string): Promise<PropertyDetail>;
   listVersions(propertyId: string): Promise<VersionSummary[]>;
   getVersion(propertyId: string, versionRef: string): Promise<PropertyVersion>;
+  setToken(token: string | null): void;
+  checkAccess(): Promise<AccessLevel>;
 }
 
 export class PropertyNotFoundError extends Error {

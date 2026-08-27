@@ -37,6 +37,8 @@ describe("renderPropertyList", () => {
       getProperty: () => Promise.reject(new Error("not used")),
       listVersions: () => Promise.reject(new Error("not used")),
       getVersion: () => Promise.reject(new Error("not used")),
+      setToken: () => {},
+      checkAccess: () => Promise.reject(new Error("not used")),
     };
     const container = document.createElement("div");
 

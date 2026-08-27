@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GitHubVersionStore } from "./githubVersionStore";
 import { PropertyNotFoundError, VersionNotFoundError } from "./types";
 
+function authHeader(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0): string | undefined {
+  const [, init] = fetchMock.mock.calls[callIndex] as [string, RequestInit & { headers: Record<string, string> }];
+  return init.headers.Authorization;
+}
+
 function encodeBase64Utf8(text: string): string {
   const bytes = new TextEncoder().encode(text);
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
@@ -21,6 +26,10 @@ function githubContentsResponse(text: string) {
 
 function failedResponse(status: number) {
   return { ok: false, status, json: async () => ({}) };
+}
+
+function githubRepoResponse(permissions?: { push?: boolean; pull?: boolean }) {
+  return { ok: true, status: 200, json: async () => ({ permissions }) };
 }
 
 function githubCommitsResponse(
@@ -172,5 +181,67 @@ describe("GitHubVersionStore", () => {
     await expect(new GitHubVersionStore().getVersion("example-oo", "missing")).rejects.toBeInstanceOf(
       VersionNotFoundError,
     );
+  });
+
+  it("sends no Authorization header when no token has been set", async () => {
+    const fetchMock = stubFetch(githubContentsResponse(JSON.stringify([])));
+
+    await new GitHubVersionStore().listProperties();
+
+    expect(authHeader(fetchMock)).toBeUndefined();
+  });
+
+  it("sends the token as a Bearer Authorization header once set, on every subsequent call", async () => {
+    const fetchMock = stubFetch(
+      githubContentsResponse(JSON.stringify([])),
+      githubCommitsResponse([]),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await store.listProperties();
+    await store.listVersions("example-oo");
+
+    expect(authHeader(fetchMock, 0)).toBe("Bearer my-token");
+    expect(authHeader(fetchMock, 1)).toBe("Bearer my-token");
+  });
+
+  it("reports can-write when the token grants push access", async () => {
+    stubFetch(githubRepoResponse({ push: true, pull: true }));
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(store.checkAccess()).resolves.toBe("can-write");
+  });
+
+  it("reports no-write when the token only grants read access", async () => {
+    stubFetch(githubRepoResponse({ push: false, pull: true }));
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(store.checkAccess()).resolves.toBe("no-write");
+  });
+
+  it("reports no-write when no token is set", async () => {
+    stubFetch(githubRepoResponse(undefined));
+    const store = new GitHubVersionStore();
+
+    await expect(store.checkAccess()).resolves.toBe("no-write");
+  });
+
+  it("reports invalid-token on a 401 response", async () => {
+    stubFetch(failedResponse(401));
+    const store = new GitHubVersionStore();
+    store.setToken("bad-token");
+
+    await expect(store.checkAccess()).resolves.toBe("invalid-token");
+  });
+
+  it("throws on an unexpected access-check failure", async () => {
+    stubFetch(failedResponse(500));
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(store.checkAccess()).rejects.toThrow(/GitHub API request failed \(500\)/);
   });
 });

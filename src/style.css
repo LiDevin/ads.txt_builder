@@ -6,6 +6,12 @@ body {
   color: #1a1a1a;
 }
 
+#nav {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
 .property-list {
   list-style: none;
   padding: 0;
@@ -59,4 +65,8 @@ body {
 .version-author {
   color: #555;
   font-size: 0.85rem;
+}
+
+.token-status {
+  font-weight: 500;
 }

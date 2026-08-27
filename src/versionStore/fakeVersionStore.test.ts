@@ -77,4 +77,26 @@ describe("FakeVersionStore", () => {
 
     await expect(store.getVersion("oo-1", "does-not-exist")).rejects.toBeInstanceOf(VersionNotFoundError);
   });
+
+  it("reports the configured access level, defaulting to no-write", async () => {
+    const defaultStore = new FakeVersionStore([]);
+    await expect(defaultStore.checkAccess()).resolves.toBe("no-write");
+
+    const writeStore = new FakeVersionStore([], { accessLevel: "can-write" });
+    await expect(writeStore.checkAccess()).resolves.toBe("can-write");
+
+    const invalidStore = new FakeVersionStore([], { accessLevel: "invalid-token" });
+    await expect(invalidStore.checkAccess()).resolves.toBe("invalid-token");
+  });
+
+  it("records the last token passed to setToken", () => {
+    const store = new FakeVersionStore([]);
+    expect(store.lastToken).toBeNull();
+
+    store.setToken("abc123");
+    expect(store.lastToken).toBe("abc123");
+
+    store.setToken(null);
+    expect(store.lastToken).toBeNull();
+  });
 });
