@@ -1,5 +1,5 @@
 import type { PropertyType, VersionStore } from "../versionStore/types";
-import { appendLink } from "./domHelpers";
+import { appendButton, appendLink } from "./domHelpers";
 import { propertyHash } from "./routes";
 import { slugify } from "./slugify";
 import { TYPE_LABELS } from "./propertyTypeLabel";
@@ -36,11 +36,7 @@ export function renderPropertyAdd(container: HTMLElement, store: VersionStore): 
   contentTextarea.placeholder = "Starting content";
   form.appendChild(contentTextarea);
 
-  const submitButton = document.createElement("button");
-  submitButton.type = "submit";
-  submitButton.className = "btn";
-  submitButton.textContent = "Create property";
-  form.appendChild(submitButton);
+  appendButton(form, "Create property", { type: "submit" });
 
   container.appendChild(form);
 

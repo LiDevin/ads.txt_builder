@@ -1,5 +1,6 @@
 import { clearToken, loadToken, saveToken } from "../auth/tokenStore";
 import type { AccessLevel, VersionStore } from "../versionStore/types";
+import { appendButton } from "./domHelpers";
 import { tryLoad } from "./tryLoad";
 
 const ACCESS_LABELS: Record<AccessLevel, string> = {
@@ -27,17 +28,14 @@ export async function renderTokenSettings(container: HTMLElement, store: Version
   input.placeholder = "Paste your GitHub personal access token";
   form.appendChild(input);
 
-  const submit = document.createElement("button");
-  submit.type = "submit";
-  submit.className = "btn";
-  submit.textContent = "Save";
-  form.appendChild(submit);
-
-  const clearButton = document.createElement("button");
-  clearButton.type = "button";
-  clearButton.className = "btn";
-  clearButton.textContent = "Clear";
-  form.appendChild(clearButton);
+  appendButton(form, "Save", { type: "submit" });
+  appendButton(form, "Clear", {
+    onClick: () => {
+      clearToken();
+      input.value = "";
+      void refreshStatus();
+    },
+  });
 
   container.appendChild(form);
 
@@ -65,12 +63,6 @@ export async function renderTokenSettings(container: HTMLElement, store: Version
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     saveToken(input.value);
-    void refreshStatus();
-  });
-
-  clearButton.addEventListener("click", () => {
-    clearToken();
-    input.value = "";
     void refreshStatus();
   });
 

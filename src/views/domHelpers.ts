@@ -15,3 +15,22 @@ export function appendLink(
   }
   parent.appendChild(link);
 }
+
+// Every button in this app is styled the same way (the shared .btn class), so
+// this centralizes that instead of repeating type/className/click-wiring at
+// each of the ~9 call sites.
+export function appendButton(
+  parent: HTMLElement,
+  text: string,
+  options?: { type?: "button" | "submit"; onClick?: () => void },
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = options?.type ?? "button";
+  button.className = "btn";
+  button.textContent = text;
+  if (options?.onClick) {
+    button.addEventListener("click", options.onClick);
+  }
+  parent.appendChild(button);
+  return button;
+}

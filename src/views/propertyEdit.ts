@@ -1,5 +1,5 @@
 import { CONFLICT_MESSAGE, SaveConflictError, type VersionStore } from "../versionStore/types";
-import { appendLink } from "./domHelpers";
+import { appendButton, appendLink } from "./domHelpers";
 import { diffLines } from "./diffLines";
 import { propertyHash } from "./routes";
 import { tryLoad } from "./tryLoad";
@@ -36,11 +36,7 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
   commentInput.placeholder = "Describe this change";
   form.appendChild(commentInput);
 
-  const saveButton = document.createElement("button");
-  saveButton.type = "submit";
-  saveButton.className = "btn";
-  saveButton.textContent = "Save";
-  form.appendChild(saveButton);
+  appendButton(form, "Save", { type: "submit" });
 
   container.appendChild(form);
 
@@ -69,23 +65,12 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
 
     appendDiff(reviewSection, originalContent, textarea.value);
 
-    const confirmButton = document.createElement("button");
-    confirmButton.type = "button";
-    confirmButton.className = "btn";
-    confirmButton.textContent = "Confirm save";
-    confirmButton.addEventListener("click", () => {
-      void confirmSave();
+    appendButton(reviewSection, "Confirm save", { onClick: () => void confirmSave() });
+    appendButton(reviewSection, "Back to editing", {
+      onClick: () => {
+        reviewSection.innerHTML = "";
+      },
     });
-    reviewSection.appendChild(confirmButton);
-
-    const backButton = document.createElement("button");
-    backButton.type = "button";
-    backButton.className = "btn";
-    backButton.textContent = "Back to editing";
-    backButton.addEventListener("click", () => {
-      reviewSection.innerHTML = "";
-    });
-    reviewSection.appendChild(backButton);
   }
 
   async function showConflict(): Promise<void> {

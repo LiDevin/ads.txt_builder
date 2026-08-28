@@ -1,5 +1,5 @@
 import type { VersionStore } from "../versionStore/types";
-import { appendLink } from "./domHelpers";
+import { appendButton, appendLink } from "./domHelpers";
 import { downloadFilename, toDownloadHref } from "./download";
 import { propertyTypeLabel } from "./propertyTypeLabel";
 import { editHash, propertyHash, versionHash } from "./routes";
@@ -59,13 +59,7 @@ export async function renderPropertyDetail(
     function renderActions(): void {
       actionsArea.innerHTML = "";
 
-      const renameButton = document.createElement("button");
-      renameButton.type = "button";
-      renameButton.className = "btn";
-      renameButton.textContent = "Rename";
-      renameButton.addEventListener("click", renderRenameForm);
-      actionsArea.appendChild(renameButton);
-
+      appendButton(actionsArea, "Rename", { onClick: renderRenameForm });
       appendLink(actionsArea, editHash(propertyId), "Edit", { className: "btn" });
       appendLink(actionsArea, toDownloadHref(property.content), "Download .txt", {
         download: downloadFilename(property),
@@ -82,26 +76,13 @@ export async function renderPropertyDetail(
       nameInput.value = property.name;
       actionsArea.appendChild(nameInput);
 
-      const saveButton = document.createElement("button");
-      saveButton.type = "button";
-      saveButton.className = "btn";
-      saveButton.textContent = "Save";
-      actionsArea.appendChild(saveButton);
-
-      const cancelButton = document.createElement("button");
-      cancelButton.type = "button";
-      cancelButton.className = "btn";
-      cancelButton.textContent = "Cancel";
-      cancelButton.addEventListener("click", renderActions);
-      actionsArea.appendChild(cancelButton);
-
       const errorMessage = document.createElement("p");
       errorMessage.setAttribute("role", "alert");
-      actionsArea.appendChild(errorMessage);
 
-      saveButton.addEventListener("click", () => {
-        void handleRenameSave(nameInput, errorMessage);
-      });
+      appendButton(actionsArea, "Save", { onClick: () => void handleRenameSave(nameInput, errorMessage) });
+      appendButton(actionsArea, "Cancel", { onClick: renderActions });
+
+      actionsArea.appendChild(errorMessage);
     }
 
     async function handleRenameSave(nameInput: HTMLInputElement, errorMessage: HTMLElement): Promise<void> {

@@ -123,8 +123,13 @@ body {
   border: 1px solid #ccc;
   border-radius: 4px;
   padding: 0.5rem 1rem;
-  margin-right: 0.5rem;
   cursor: pointer;
+}
+
+/* Spacing between adjacent buttons, without a margin that would double up
+   with `gap` if a parent ever becomes a flex/grid container. */
+.btn + .btn {
+  margin-left: 0.5rem;
 }
 
 .btn:hover {
