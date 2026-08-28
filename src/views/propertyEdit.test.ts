@@ -12,8 +12,14 @@ const property = {
 };
 
 function setContentAndComment(container: HTMLElement, content: string, comment: string): void {
+  setContentNameAndComment(container, content, "v2", comment);
+}
+
+function setContentNameAndComment(container: HTMLElement, content: string, name: string, comment: string): void {
   const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
   textarea.value = content;
+  const nameInput = container.querySelector(".edit-version-name") as HTMLInputElement;
+  nameInput.value = name;
   const commentInput = container.querySelector(".edit-comment") as HTMLInputElement;
   commentInput.value = comment;
 }
@@ -41,6 +47,20 @@ describe("renderPropertyEdit", () => {
 
     const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
     expect(textarea.value).toBe("example.com, 1, DIRECT");
+  });
+
+  it("blocks saving without a version name, showing an error and no diff", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyEdit(container, store, "oo-1");
+
+    setContentNameAndComment(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER", "", "A comment");
+    submit(container);
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("version name");
+    expect(container.querySelectorAll(".diff-line")).toHaveLength(0);
+
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "example.com, 1, DIRECT" });
   });
 
   it("blocks saving without a comment, showing an error and no diff", async () => {
@@ -94,7 +114,7 @@ describe("renderPropertyEdit", () => {
       content: "example.com, 1, DIRECT\nnew.com, 2, RESELLER",
     });
     await expect(store.listVersions("oo-1")).resolves.toEqual([
-      expect.objectContaining({ comment: "Add new partner" }),
+      expect.objectContaining({ name: "v2", comment: "Add new partner" }),
       expect.objectContaining({ comment: "Initial version" }),
     ]);
     expect(window.location.hash).toBe("#/property/oo-1");
@@ -149,6 +169,7 @@ describe("renderPropertyEdit", () => {
     await store.saveVersion(
       "oo-1",
       "example.com, 1, DIRECT\nother-editor.com, 9, RESELLER",
+      "v2",
       "Someone else's edit",
       "sha-1",
     );

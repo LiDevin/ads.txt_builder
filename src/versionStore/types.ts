@@ -15,6 +15,9 @@ export interface PropertyDetail extends PropertySummary {
 
 export interface VersionSummary {
   ref: string;
+  // Absent for versions saved before version names existed; callers should
+  // fall back to something else (e.g. the timestamp) for display.
+  name?: string;
   comment: string;
   author: string;
   timestamp: string;
@@ -33,7 +36,13 @@ export interface VersionStore {
   getVersion(propertyId: string, versionRef: string): Promise<PropertyVersion>;
   setToken(token: string | null): void;
   checkAccess(): Promise<AccessLevel>;
-  saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion>;
+  saveVersion(
+    propertyId: string,
+    content: string,
+    name: string,
+    comment: string,
+    baseVersion: string,
+  ): Promise<PropertyVersion>;
   createProperty(id: string, name: string, type: PropertyType, content: string): Promise<void>;
   renameProperty(id: string, newName: string): Promise<void>;
 }

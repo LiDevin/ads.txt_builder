@@ -83,6 +83,33 @@ describe("renderPropertyDetail", () => {
     expect(historyLinks[1].getAttribute("href")).toBe("#/property/oo-1/version/sha-1");
   });
 
+  it("shows a version's name as its primary label, with the comment alongside", async () => {
+    const namedProperty = {
+      ...property,
+      versions: [
+        { ref: "sha-2", name: "v2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z", content: "x" },
+      ],
+    };
+    const store = new FakeVersionStore([namedProperty]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const historyLink = container.querySelector(".version-history a");
+    expect(historyLink?.textContent).toBe("v2");
+    expect(container.querySelector(".version-comment")?.textContent).toBe("Add reseller line");
+  });
+
+  it("falls back to the timestamp as the label for a version saved before names existed", async () => {
+    const store = new FakeVersionStore([property]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const historyLink = container.querySelector(".version-history a");
+    expect(historyLink?.textContent).toBe("2026-08-28T09:00:00Z");
+  });
+
   it("shows a past version's content instead of the current version when a versionRef is given", async () => {
     const store = new FakeVersionStore([property]);
     const container = document.createElement("div");

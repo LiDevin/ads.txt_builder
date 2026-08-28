@@ -157,22 +157,36 @@ describe("GitHubVersionStore", () => {
   it("lists a property's versions from its commit history, newest first", async () => {
     const fetchMock = stubFetch(
       githubCommitsResponse([
-        { sha: "sha-2", message: "Add reseller line", authorName: "Sam", date: "2026-08-28T09:00:00Z" },
-        { sha: "sha-1", message: "Initial version", authorName: "Alex", date: "2026-08-27T10:00:00Z" },
+        { sha: "sha-2", message: "v2\n\nAdd reseller line", authorName: "Sam", date: "2026-08-28T09:00:00Z" },
+        { sha: "sha-1", message: "v1\n\nInitial version", authorName: "Alex", date: "2026-08-27T10:00:00Z" },
       ]),
     );
 
     const versions = await new GitHubVersionStore().listVersions("example-oo");
 
     expect(versions).toEqual([
-      { ref: "sha-2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z" },
-      { ref: "sha-1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z" },
+      { ref: "sha-2", name: "v2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z" },
+      { ref: "sha-1", name: "v1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z" },
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/commits\?.*path=data%2Fproperties%2Fexample-oo%2Fcontent\.txt/),
       expect.any(Object),
     );
     expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/per_page=100/), expect.any(Object));
+  });
+
+  it("falls back to no name (comment-only) for a version saved before names existed", async () => {
+    const fetchMock = stubFetch(
+      githubCommitsResponse([{ sha: "sha-1", message: "Initial version", authorName: "Alex", date: "2026-08-27T10:00:00Z" }]),
+    );
+
+    const versions = await new GitHubVersionStore().listVersions("example-oo");
+
+    expect(versions).toEqual([
+      { ref: "sha-1", comment: "Initial version", author: "Alex", timestamp: "2026-08-27T10:00:00Z" },
+    ]);
+    expect(versions[0].name).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it("gets a specific past version's content by its ref", async () => {
@@ -309,7 +323,7 @@ describe("GitHubVersionStore", () => {
 
   it("saves a new version via a PUT to the Contents API, returning the resulting commit", async () => {
     stubFetch(
-      githubPutResponse({ sha: "new-sha", message: "Add reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
+      githubPutResponse({ sha: "new-sha", message: "v2\n\nAdd reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
     );
     const store = new GitHubVersionStore();
     store.setToken("my-token");
@@ -317,12 +331,14 @@ describe("GitHubVersionStore", () => {
     const version = await store.saveVersion(
       "example-oo",
       "example.com, 1, DIRECT\nreseller.com, 2, RESELLER\n",
+      "v2",
       "Add reseller",
       "current-blob-sha",
     );
 
     expect(version).toEqual({
       ref: "new-sha",
+      name: "v2",
       comment: "Add reseller",
       author: "Alex",
       timestamp: "2026-08-29T12:00:00Z",
@@ -330,19 +346,19 @@ describe("GitHubVersionStore", () => {
     });
   });
 
-  it("PUTs the new content, comment, and the passed-in base version as the sha, authenticated with the token", async () => {
+  it("PUTs the new content, the name+comment as the commit message, and the passed-in base version as the sha, authenticated with the token", async () => {
     const fetchMock = stubFetch(
-      githubPutResponse({ sha: "new-sha", message: "Add reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
+      githubPutResponse({ sha: "new-sha", message: "v2\n\nAdd reseller", authorName: "Alex", date: "2026-08-29T12:00:00Z" }),
     );
     const store = new GitHubVersionStore();
     store.setToken("my-token");
 
-    await store.saveVersion("example-oo", "new content", "Add reseller", "current-blob-sha");
+    await store.saveVersion("example-oo", "new content", "v2", "Add reseller", "current-blob-sha");
 
     expect(requestMethod(fetchMock, 0)).toBe("PUT");
     expect(authHeader(fetchMock, 0)).toBe("Bearer my-token");
     const body = requestBody(fetchMock, 0);
-    expect(body.message).toBe("Add reseller");
+    expect(body.message).toBe("v2\n\nAdd reseller");
     expect(body.sha).toBe("current-blob-sha");
     expect(decodeBase64Utf8(body.content as string)).toBe("new content");
   });
@@ -352,9 +368,9 @@ describe("GitHubVersionStore", () => {
     const store = new GitHubVersionStore();
     store.setToken("read-only-token");
 
-    await expect(store.saveVersion("example-oo", "new content", "Add reseller", "current-blob-sha")).rejects.toThrow(
-      /GitHub API request failed \(403\)/,
-    );
+    await expect(
+      store.saveVersion("example-oo", "new content", "v2", "Add reseller", "current-blob-sha"),
+    ).rejects.toThrow(/GitHub API request failed \(403\)/);
   });
 
   it("throws SaveConflictError on a 409 response, without re-fetching a fresh sha and retrying", async () => {
@@ -363,7 +379,7 @@ describe("GitHubVersionStore", () => {
     store.setToken("my-token");
 
     await expect(
-      store.saveVersion("example-oo", "new content", "Add reseller", "stale-blob-sha"),
+      store.saveVersion("example-oo", "new content", "v2", "Add reseller", "stale-blob-sha"),
     ).rejects.toBeInstanceOf(SaveConflictError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

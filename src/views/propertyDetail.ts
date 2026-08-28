@@ -121,7 +121,7 @@ export async function renderPropertyDetail(
   for (const version of versions) {
     const item = document.createElement("li");
 
-    appendLink(item, versionHash(propertyId, version.ref), version.timestamp);
+    appendLink(item, versionHash(propertyId, version.ref), version.name ?? version.timestamp);
 
     const comment = document.createElement("span");
     comment.className = "version-comment";

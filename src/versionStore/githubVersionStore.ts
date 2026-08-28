@@ -35,6 +35,25 @@ function authorFields(author: GitHubAuthor | null): { author: string; timestamp:
   return { author: author?.name ?? "Unknown", timestamp: author?.date ?? "" };
 }
 
+// A version's name and comment are both stored in the one commit message
+// GitHub gives us, using git's own subject/body convention (subject line,
+// blank line, body). A version saved before names existed has no blank-line
+// separator, so it decodes as comment-only with no name.
+function formatVersionMessage(name: string, comment: string): string {
+  return `${name}\n\n${comment}`;
+}
+
+function parseVersionMessage(message: string): { name?: string; comment: string } {
+  const separatorIndex = message.indexOf("\n\n");
+  if (separatorIndex === -1) {
+    return { comment: message };
+  }
+  return {
+    name: message.slice(0, separatorIndex),
+    comment: message.slice(separatorIndex + 2),
+  };
+}
+
 function decodeBase64Utf8(base64: string): string {
   const binary = atob(base64.replace(/\n/g, ""));
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -116,7 +135,7 @@ async function fetchCommitHistory(path: string, token: string | null): Promise<V
   const commits = (await githubApiRequest(url, path, token)) as GitHubCommit[];
   return commits.map((commit) => ({
     ref: commit.sha,
-    comment: commit.commit.message,
+    ...parseVersionMessage(commit.commit.message),
     ...authorFields(commit.commit.author),
   }));
 }
@@ -171,10 +190,20 @@ export class GitHubVersionStore implements VersionStore {
     return body.permissions?.push ? "can-write" : "no-write";
   }
 
-  async saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion> {
+  async saveVersion(
+    propertyId: string,
+    content: string,
+    name: string,
+    comment: string,
+    baseVersion: string,
+  ): Promise<PropertyVersion> {
     const path = contentPath(propertyId);
     const url = repoApiUrl(`/contents/${path}`);
-    const requestBody = JSON.stringify({ message: comment, content: encodeBase64Utf8(content), sha: baseVersion });
+    const requestBody = JSON.stringify({
+      message: formatVersionMessage(name, comment),
+      content: encodeBase64Utf8(content),
+      sha: baseVersion,
+    });
 
     const response = await githubFetch(url, this.token, { method: "PUT", body: requestBody });
     if (response.status === 409) {
@@ -185,7 +214,7 @@ export class GitHubVersionStore implements VersionStore {
     const body = (await response.json()) as { commit: GitHubPutCommit };
     return {
       ref: body.commit.sha,
-      comment: body.commit.message,
+      ...parseVersionMessage(body.commit.message),
       ...authorFields(body.commit.author),
       content,
     };

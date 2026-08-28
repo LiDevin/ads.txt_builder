@@ -82,6 +82,7 @@ body {
 }
 
 .edit-comment,
+.edit-version-name,
 .add-name,
 .add-type {
   display: block;

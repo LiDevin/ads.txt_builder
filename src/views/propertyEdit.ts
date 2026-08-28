@@ -30,6 +30,12 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
   textarea.value = originalContent;
   form.appendChild(textarea);
 
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "edit-version-name";
+  nameInput.placeholder = "Version name (e.g. v1.2 or Q3 update)";
+  form.appendChild(nameInput);
+
   const commentInput = document.createElement("input");
   commentInput.type = "text";
   commentInput.className = "edit-comment";
@@ -87,7 +93,7 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
   async function confirmSave(): Promise<void> {
     errorMessage.textContent = "";
     try {
-      await store.saveVersion(propertyId, textarea.value, commentInput.value, baseVersion);
+      await store.saveVersion(propertyId, textarea.value, nameInput.value, commentInput.value, baseVersion);
     } catch (error) {
       if (error instanceof SaveConflictError) {
         await showConflict();
@@ -104,6 +110,10 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
     errorMessage.textContent = "";
     reviewSection.innerHTML = "";
 
+    if (!nameInput.value.trim()) {
+      errorMessage.textContent = "A version name is required before saving.";
+      return;
+    }
     if (!commentInput.value.trim()) {
       errorMessage.textContent = "A comment is required before saving.";
       return;
