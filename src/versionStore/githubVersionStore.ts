@@ -39,6 +39,10 @@ function authorFields(author: GitHubAuthor | null): { author: string; timestamp:
 // GitHub gives us, using git's own subject/body convention (subject line,
 // blank line, body). A version saved before names existed has no blank-line
 // separator, so it decodes as comment-only with no name.
+//
+// Splitting on the first "\n\n" is only safe because both fields come from
+// single-line <input type="text"> elements, which can't contain a newline.
+// If either field ever became multi-line, this would need a real delimiter.
 function formatVersionMessage(name: string, comment: string): string {
   return `${name}\n\n${comment}`;
 }
