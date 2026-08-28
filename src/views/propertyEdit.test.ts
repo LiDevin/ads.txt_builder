@@ -29,6 +29,28 @@ function submit(container: HTMLElement): void {
   form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
 }
 
+function editTextarea(container: HTMLElement, content: string): void {
+  const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+  textarea.value = content;
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function editComment(container: HTMLElement, comment: string): void {
+  const commentInput = container.querySelector(".edit-comment") as HTMLInputElement;
+  commentInput.value = comment;
+  commentInput.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function editVersionName(container: HTMLElement, name: string): void {
+  const nameInput = container.querySelector(".edit-version-name") as HTMLInputElement;
+  nameInput.value = name;
+  nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function reviewBoxIsVisible(container: HTMLElement): boolean {
+  return container.querySelector(".edit-review")?.children.length !== 0;
+}
+
 async function flush(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -191,6 +213,71 @@ describe("renderPropertyEdit", () => {
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({
       content: "example.com, 1, DIRECT\nother-editor.com, 9, RESELLER",
     });
+  });
+
+  it("hides the whole review box when the content is edited again after Save shows it", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyEdit(container, store, "oo-1");
+
+    setContentAndComment(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER", "Add new partner");
+    submit(container);
+    expect(reviewBoxIsVisible(container)).toBe(true);
+
+    editTextarea(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER\nthird.com, 3, RESELLER");
+
+    expect(reviewBoxIsVisible(container)).toBe(false);
+    expect(container.querySelectorAll(".diff-line")).toHaveLength(0);
+    expect(Array.from(container.querySelectorAll("button")).some((b) => b.textContent === "Confirm save")).toBe(
+      false,
+    );
+  });
+
+  it("hides the whole review box when the version name is edited again after Save shows it", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyEdit(container, store, "oo-1");
+
+    setContentAndComment(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER", "Add new partner");
+    submit(container);
+    expect(reviewBoxIsVisible(container)).toBe(true);
+
+    editVersionName(container, "v3");
+
+    expect(reviewBoxIsVisible(container)).toBe(false);
+  });
+
+  it("hides the whole review box when the comment is edited again after Save shows it", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyEdit(container, store, "oo-1");
+
+    setContentAndComment(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER", "Add new partner");
+    submit(container);
+    expect(reviewBoxIsVisible(container)).toBe(true);
+
+    editComment(container, "Add new partner, take two");
+
+    expect(reviewBoxIsVisible(container)).toBe(false);
+  });
+
+  it("shows a fresh diff reflecting the latest edit when Save is clicked again after a post-review edit", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyEdit(container, store, "oo-1");
+
+    setContentAndComment(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER", "Add new partner");
+    submit(container);
+
+    editTextarea(container, "example.com, 1, DIRECT\nnew.com, 2, RESELLER\nthird.com, 3, RESELLER");
+    submit(container);
+
+    const diffLines = container.querySelectorAll(".diff-line");
+    expect(Array.from(diffLines).map((el) => el.textContent)).toEqual([
+      "example.com, 1, DIRECT",
+      "new.com, 2, RESELLER",
+      "third.com, 3, RESELLER",
+    ]);
   });
 
   it("shows an error message when the property fails to load", async () => {

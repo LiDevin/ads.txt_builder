@@ -234,4 +234,26 @@ describe("FakeVersionStore", () => {
 
     await expect(store.renameProperty("missing", "New Name")).rejects.toBeInstanceOf(PropertyNotFoundError);
   });
+
+  it("deletes a property, removing it from the list and its content", async () => {
+    const store = new FakeVersionStore([oneVersionProperty, twoVersionProperty], { accessLevel: "can-write" });
+
+    await store.deleteProperty("oo-1");
+
+    await expect(store.listProperties()).resolves.toEqual([{ id: "oo-2", name: "Other Site", type: "OO" }]);
+    await expect(store.getProperty("oo-1")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("throws when deleting without can-write access, leaving the property untouched", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
+
+    await expect(store.deleteProperty("oo-1")).rejects.toThrow();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ id: "oo-1" });
+  });
+
+  it("throws PropertyNotFoundError when deleting an unknown property", async () => {
+    const store = new FakeVersionStore([], { accessLevel: "can-write" });
+
+    await expect(store.deleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
 });

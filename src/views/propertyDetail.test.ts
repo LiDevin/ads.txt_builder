@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { renderPropertyDetail } from "./propertyDetail";
 import { FakeVersionStore } from "../versionStore/fakeVersionStore";
 
@@ -25,6 +25,10 @@ const property = {
 };
 
 describe("renderPropertyDetail", () => {
+  beforeEach(() => {
+    window.location.hash = "";
+  });
+
   it("renders the property's name, type, and current content", async () => {
     const store = new FakeVersionStore([property]);
     const container = document.createElement("div");
@@ -292,5 +296,82 @@ describe("renderPropertyDetail", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("write access");
     expect(container.querySelector(".rename-name")).not.toBeNull();
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Main Site" });
+  });
+
+  it("shows a Delete action in the same group as Rename/Edit/Download", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const deleteButton = findButton(container, "Delete");
+    const editLink = Array.from(container.querySelectorAll("a")).find((a) => a.textContent === "Edit");
+    expect(deleteButton).toBeDefined();
+    expect(deleteButton.parentElement).toBe(editLink?.parentElement);
+  });
+
+  it("does not show Delete when viewing a past version", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1", "sha-1");
+
+    expect(findButton(container, "Delete")).toBeUndefined();
+  });
+
+  it("clicking Delete reveals an inline confirmation, without deleting anything yet", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Delete").click();
+
+    expect(container.textContent).toContain("Main Site");
+    expect(findButton(container, "Delete")).toBeDefined();
+    expect(findButton(container, "Cancel")).toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toBeDefined();
+  });
+
+  it("Cancel in the delete confirmation returns to the normal actions, deleting nothing", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Delete").click();
+    findButton(container, "Cancel").click();
+
+    expect(findButton(container, "Rename")).toBeDefined();
+    expect(findButton(container, "Delete")).toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toBeDefined();
+  });
+
+  it("confirming delete calls deleteProperty and navigates back to the property list", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Delete").click();
+    findButton(container, "Delete").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(window.location.hash).toBe("#/");
+    await expect(store.getProperty("oo-1")).rejects.toThrow();
+  });
+
+  it("shows an error and keeps the confirmation open when delete fails (e.g. no write access), without navigating away", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "no-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Delete").click();
+    findButton(container, "Delete").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("write access");
+    expect(window.location.hash).toBe("");
+    expect(findButton(container, "Cancel")).toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toBeDefined();
   });
 });

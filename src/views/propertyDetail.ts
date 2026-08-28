@@ -65,6 +65,7 @@ export async function renderPropertyDetail(
         download: downloadFilename(property),
         className: "btn",
       });
+      appendButton(actionsArea, "Delete", { onClick: renderDeleteConfirm });
     }
 
     function renderRenameForm(): void {
@@ -101,6 +102,33 @@ export async function renderPropertyDetail(
       }
 
       await renderPropertyDetail(container, store, propertyId, versionRef);
+    }
+
+    function renderDeleteConfirm(): void {
+      actionsArea.innerHTML = "";
+
+      const confirmMessage = document.createElement("span");
+      confirmMessage.textContent = `Delete "${property.name}"? This cannot be undone.`;
+      actionsArea.appendChild(confirmMessage);
+
+      const errorMessage = document.createElement("p");
+      errorMessage.setAttribute("role", "alert");
+
+      appendButton(actionsArea, "Delete", { onClick: () => void handleDeleteConfirm(errorMessage) });
+      appendButton(actionsArea, "Cancel", { onClick: renderActions });
+
+      actionsArea.appendChild(errorMessage);
+    }
+
+    async function handleDeleteConfirm(errorMessage: HTMLElement): Promise<void> {
+      errorMessage.textContent = "";
+      try {
+        await store.deleteProperty(propertyId);
+      } catch (error) {
+        errorMessage.textContent = `Failed to delete: ${(error as Error).message}`;
+        return;
+      }
+      window.location.hash = "#/";
     }
 
     renderActions();

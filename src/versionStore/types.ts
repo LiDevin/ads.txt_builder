@@ -45,6 +45,7 @@ export interface VersionStore {
   ): Promise<PropertyVersion>;
   createProperty(id: string, name: string, type: PropertyType, content: string): Promise<void>;
   renameProperty(id: string, newName: string): Promise<void>;
+  deleteProperty(id: string): Promise<void>;
 }
 
 export class PropertyNotFoundError extends Error {
