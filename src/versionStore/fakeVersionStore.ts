@@ -83,7 +83,13 @@ export class FakeVersionStore implements VersionStore {
     return version;
   }
 
-  async saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion> {
+  async saveVersion(
+    propertyId: string,
+    content: string,
+    name: string,
+    comment: string,
+    baseVersion: string,
+  ): Promise<PropertyVersion> {
     const property = this.findProperty(propertyId);
     if (this.accessLevel !== "can-write") {
       throw new Error("This token does not have write access to save changes.");
@@ -94,6 +100,7 @@ export class FakeVersionStore implements VersionStore {
 
     const newVersion: PropertyVersion = {
       ref: `fake-sha-${property.versions.length + 1}`,
+      name,
       comment,
       author: "Fake User",
       timestamp: new Date().toISOString(),
@@ -125,5 +132,13 @@ export class FakeVersionStore implements VersionStore {
         },
       ],
     });
+  }
+
+  async renameProperty(id: string, newName: string): Promise<void> {
+    const property = this.findProperty(id);
+    if (this.accessLevel !== "can-write") {
+      throw new Error("This token does not have write access to rename properties.");
+    }
+    property.name = newName;
   }
 }

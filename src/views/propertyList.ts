@@ -12,7 +12,7 @@ export async function renderPropertyList(container: HTMLElement, store: VersionS
   }
 
   container.innerHTML = "";
-  appendLink(container, "#/add", "Add a new property");
+  appendLink(container, "#/add", "Add a new property", { className: "btn" });
 
   if (properties.length === 0) {
     const empty = document.createElement("p");

@@ -35,6 +35,29 @@ function authorFields(author: GitHubAuthor | null): { author: string; timestamp:
   return { author: author?.name ?? "Unknown", timestamp: author?.date ?? "" };
 }
 
+// A version's name and comment are both stored in the one commit message
+// GitHub gives us, using git's own subject/body convention (subject line,
+// blank line, body). A version saved before names existed has no blank-line
+// separator, so it decodes as comment-only with no name.
+//
+// Splitting on the first "\n\n" is only safe because both fields come from
+// single-line <input type="text"> elements, which can't contain a newline.
+// If either field ever became multi-line, this would need a real delimiter.
+function formatVersionMessage(name: string, comment: string): string {
+  return `${name}\n\n${comment}`;
+}
+
+function parseVersionMessage(message: string): { name?: string; comment: string } {
+  const separatorIndex = message.indexOf("\n\n");
+  if (separatorIndex === -1) {
+    return { comment: message };
+  }
+  return {
+    name: message.slice(0, separatorIndex),
+    comment: message.slice(separatorIndex + 2),
+  };
+}
+
 function decodeBase64Utf8(base64: string): string {
   const binary = atob(base64.replace(/\n/g, ""));
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -79,7 +102,12 @@ async function githubApiRequest(
   token: string | null,
   init?: GitHubRequestInit,
 ): Promise<unknown> {
-  const response = await githubFetch(url, token, init);
+  let response = await githubFetch(url, token, init);
+  if (response.status === 401 && token) {
+    // A saved token that's actually invalid must not break reads that would
+    // otherwise succeed anonymously against this public repo.
+    response = await githubFetch(url, null, init);
+  }
   throwIfFailed(response, description);
   return response.json();
 }
@@ -111,7 +139,7 @@ async function fetchCommitHistory(path: string, token: string | null): Promise<V
   const commits = (await githubApiRequest(url, path, token)) as GitHubCommit[];
   return commits.map((commit) => ({
     ref: commit.sha,
-    comment: commit.commit.message,
+    ...parseVersionMessage(commit.commit.message),
     ...authorFields(commit.commit.author),
   }));
 }
@@ -166,10 +194,20 @@ export class GitHubVersionStore implements VersionStore {
     return body.permissions?.push ? "can-write" : "no-write";
   }
 
-  async saveVersion(propertyId: string, content: string, comment: string, baseVersion: string): Promise<PropertyVersion> {
+  async saveVersion(
+    propertyId: string,
+    content: string,
+    name: string,
+    comment: string,
+    baseVersion: string,
+  ): Promise<PropertyVersion> {
     const path = contentPath(propertyId);
     const url = repoApiUrl(`/contents/${path}`);
-    const requestBody = JSON.stringify({ message: comment, content: encodeBase64Utf8(content), sha: baseVersion });
+    const requestBody = JSON.stringify({
+      message: formatVersionMessage(name, comment),
+      content: encodeBase64Utf8(content),
+      sha: baseVersion,
+    });
 
     const response = await githubFetch(url, this.token, { method: "PUT", body: requestBody });
     if (response.status === 409) {
@@ -180,7 +218,7 @@ export class GitHubVersionStore implements VersionStore {
     const body = (await response.json()) as { commit: GitHubPutCommit };
     return {
       ref: body.commit.sha,
-      comment: body.commit.message,
+      ...parseVersionMessage(body.commit.message),
       ...authorFields(body.commit.author),
       content,
     };
@@ -204,6 +242,26 @@ export class GitHubVersionStore implements VersionStore {
       method: "PUT",
       body: JSON.stringify({
         message: `Add property: ${name}`,
+        content: encodeBase64Utf8(`${JSON.stringify(properties, null, 2)}\n`),
+        sha: manifest.sha,
+      }),
+    });
+    throwIfFailed(manifestResponse, "updating property manifest");
+  }
+
+  async renameProperty(id: string, newName: string): Promise<void> {
+    const manifest = await fetchFileMeta(MANIFEST_PATH, this.token);
+    const properties = JSON.parse(manifest.content) as PropertySummary[];
+    const property = properties.find((candidate) => candidate.id === id);
+    if (!property) {
+      throw new PropertyNotFoundError(id);
+    }
+    property.name = newName;
+
+    const manifestResponse = await githubFetch(repoApiUrl(`/contents/${MANIFEST_PATH}`), this.token, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: `Rename property to "${newName}"`,
         content: encodeBase64Utf8(`${JSON.stringify(properties, null, 2)}\n`),
         sha: manifest.sha,
       }),

@@ -30,6 +30,7 @@ describe("renderPropertyList", () => {
 
     const addLink = Array.from(container.querySelectorAll("a")).find((a) => a.getAttribute("href") === "#/add");
     expect(addLink?.textContent).toContain("Add");
+    expect(addLink?.className).toBe("btn");
   });
 
   it("shows a message when there are no properties", async () => {

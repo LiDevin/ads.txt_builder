@@ -1,5 +1,5 @@
 import type { VersionStore } from "../versionStore/types";
-import { appendLink } from "./domHelpers";
+import { appendButton, appendLink } from "./domHelpers";
 import { downloadFilename, toDownloadHref } from "./download";
 import { propertyTypeLabel } from "./propertyTypeLabel";
 import { editHash, propertyHash, versionHash } from "./routes";
@@ -53,10 +53,57 @@ export async function renderPropertyDetail(
 
     appendLink(container, propertyHash(propertyId), "View current version");
   } else {
-    appendLink(container, editHash(propertyId), "Edit");
-    appendLink(container, toDownloadHref(property.content), "Download .txt", {
-      download: downloadFilename(property),
-    });
+    const actionsArea = document.createElement("div");
+    container.appendChild(actionsArea);
+
+    function renderActions(): void {
+      actionsArea.innerHTML = "";
+
+      appendButton(actionsArea, "Rename", { onClick: renderRenameForm });
+      appendLink(actionsArea, editHash(propertyId), "Edit", { className: "btn" });
+      appendLink(actionsArea, toDownloadHref(property.content), "Download .txt", {
+        download: downloadFilename(property),
+        className: "btn",
+      });
+    }
+
+    function renderRenameForm(): void {
+      actionsArea.innerHTML = "";
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "rename-name";
+      nameInput.value = property.name;
+      actionsArea.appendChild(nameInput);
+
+      const errorMessage = document.createElement("p");
+      errorMessage.setAttribute("role", "alert");
+
+      appendButton(actionsArea, "Save", { onClick: () => void handleRenameSave(nameInput, errorMessage) });
+      appendButton(actionsArea, "Cancel", { onClick: renderActions });
+
+      actionsArea.appendChild(errorMessage);
+    }
+
+    async function handleRenameSave(nameInput: HTMLInputElement, errorMessage: HTMLElement): Promise<void> {
+      errorMessage.textContent = "";
+      const newName = nameInput.value.trim();
+      if (!newName) {
+        errorMessage.textContent = "A display name is required.";
+        return;
+      }
+
+      try {
+        await store.renameProperty(propertyId, newName);
+      } catch (error) {
+        errorMessage.textContent = `Failed to rename: ${(error as Error).message}`;
+        return;
+      }
+
+      await renderPropertyDetail(container, store, propertyId, versionRef);
+    }
+
+    renderActions();
   }
 
   const content = document.createElement("pre");
@@ -74,7 +121,7 @@ export async function renderPropertyDetail(
   for (const version of versions) {
     const item = document.createElement("li");
 
-    appendLink(item, versionHash(propertyId, version.ref), version.timestamp);
+    appendLink(item, versionHash(propertyId, version.ref), version.name ?? version.timestamp);
 
     const comment = document.createElement("span");
     comment.className = "version-comment";

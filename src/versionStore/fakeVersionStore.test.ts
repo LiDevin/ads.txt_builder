@@ -107,10 +107,12 @@ describe("FakeVersionStore", () => {
     const saved = await store.saveVersion(
       "oo-1",
       "example.com, 1, DIRECT\nreseller.com, 2, RESELLER",
+      "v2",
       "Add reseller",
       "sha-1",
     );
 
+    expect(saved.name).toBe("v2");
     expect(saved.comment).toBe("Add reseller");
     expect(saved.content).toBe("example.com, 1, DIRECT\nreseller.com, 2, RESELLER");
 
@@ -118,22 +120,33 @@ describe("FakeVersionStore", () => {
       content: "example.com, 1, DIRECT\nreseller.com, 2, RESELLER",
     });
     await expect(store.listVersions("oo-1")).resolves.toEqual([
-      expect.objectContaining({ comment: "Add reseller" }),
+      expect.objectContaining({ name: "v2", comment: "Add reseller" }),
       expect.objectContaining({ comment: "Initial version" }),
     ]);
+  });
+
+  it("shows no name for a version that predates version names, while newer versions still carry theirs", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    await store.saveVersion("oo-1", "new content", "v2", "Add reseller", "sha-1");
+
+    const versions = await store.listVersions("oo-1");
+    expect(versions[0].name).toBe("v2");
+    expect(versions[1].name).toBeUndefined();
+    expect(versions[1].comment).toBe("Initial version");
   });
 
   it("throws when saving without can-write access, leaving the property unchanged", async () => {
     const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
 
-    await expect(store.saveVersion("oo-1", "new content", "Attempted edit", "sha-1")).rejects.toThrow();
+    await expect(store.saveVersion("oo-1", "new content", "v2", "Attempted edit", "sha-1")).rejects.toThrow();
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "example.com, 1, DIRECT" });
   });
 
   it("throws PropertyNotFoundError when saving to an unknown property", async () => {
     const store = new FakeVersionStore([], { accessLevel: "can-write" });
 
-    await expect(store.saveVersion("missing", "content", "comment", "irrelevant")).rejects.toBeInstanceOf(
+    await expect(store.saveVersion("missing", "content", "v1", "comment", "irrelevant")).rejects.toBeInstanceOf(
       PropertyNotFoundError,
     );
   });
@@ -141,7 +154,7 @@ describe("FakeVersionStore", () => {
   it("throws SaveConflictError when the passed baseVersion is stale", async () => {
     const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
 
-    await expect(store.saveVersion("oo-1", "new content", "comment", "sha-0-stale")).rejects.toBeInstanceOf(
+    await expect(store.saveVersion("oo-1", "new content", "v2", "comment", "sha-0-stale")).rejects.toBeInstanceOf(
       SaveConflictError,
     );
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "example.com, 1, DIRECT" });
@@ -151,11 +164,11 @@ describe("FakeVersionStore", () => {
     const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
     const { baseVersion } = await store.getProperty("oo-1");
 
-    const first = await store.saveVersion("oo-1", "first editor's content", "First edit", baseVersion);
+    const first = await store.saveVersion("oo-1", "first editor's content", "v2", "First edit", baseVersion);
     expect(first.content).toBe("first editor's content");
 
     await expect(
-      store.saveVersion("oo-1", "second editor's content", "Second edit", baseVersion),
+      store.saveVersion("oo-1", "second editor's content", "v2-conflict", "Second edit", baseVersion),
     ).rejects.toBeInstanceOf(SaveConflictError);
 
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ content: "first editor's content" });
@@ -190,5 +203,35 @@ describe("FakeVersionStore", () => {
     await expect(store.createProperty("oo-1", "Duplicate", "OO", "content")).rejects.toBeInstanceOf(
       PropertyAlreadyExistsError,
     );
+  });
+
+  it("renames a property, leaving its id and content untouched", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    await store.renameProperty("oo-1", "Renamed Site");
+
+    await expect(store.listProperties()).resolves.toContainEqual({
+      id: "oo-1",
+      name: "Renamed Site",
+      type: "OO",
+    });
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({
+      id: "oo-1",
+      name: "Renamed Site",
+      content: "example.com, 1, DIRECT",
+    });
+  });
+
+  it("throws when renaming without can-write access, leaving the name unchanged", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
+
+    await expect(store.renameProperty("oo-1", "Renamed Site")).rejects.toThrow();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Main Site" });
+  });
+
+  it("throws PropertyNotFoundError when renaming an unknown property", async () => {
+    const store = new FakeVersionStore([], { accessLevel: "can-write" });
+
+    await expect(store.renameProperty("missing", "New Name")).rejects.toBeInstanceOf(PropertyNotFoundError);
   });
 });

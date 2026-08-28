@@ -1,5 +1,5 @@
 import { CONFLICT_MESSAGE, SaveConflictError, type VersionStore } from "../versionStore/types";
-import { appendLink } from "./domHelpers";
+import { appendButton, appendLink } from "./domHelpers";
 import { diffLines } from "./diffLines";
 import { propertyHash } from "./routes";
 import { tryLoad } from "./tryLoad";
@@ -30,16 +30,19 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
   textarea.value = originalContent;
   form.appendChild(textarea);
 
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "edit-version-name";
+  nameInput.placeholder = "Version name (e.g. v1.2 or Q3 update)";
+  form.appendChild(nameInput);
+
   const commentInput = document.createElement("input");
   commentInput.type = "text";
   commentInput.className = "edit-comment";
   commentInput.placeholder = "Describe this change";
   form.appendChild(commentInput);
 
-  const saveButton = document.createElement("button");
-  saveButton.type = "submit";
-  saveButton.textContent = "Save";
-  form.appendChild(saveButton);
+  appendButton(form, "Save", { type: "submit" });
 
   container.appendChild(form);
 
@@ -68,21 +71,12 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
 
     appendDiff(reviewSection, originalContent, textarea.value);
 
-    const confirmButton = document.createElement("button");
-    confirmButton.type = "button";
-    confirmButton.textContent = "Confirm save";
-    confirmButton.addEventListener("click", () => {
-      void confirmSave();
+    appendButton(reviewSection, "Confirm save", { onClick: () => void confirmSave() });
+    appendButton(reviewSection, "Back to editing", {
+      onClick: () => {
+        reviewSection.innerHTML = "";
+      },
     });
-    reviewSection.appendChild(confirmButton);
-
-    const backButton = document.createElement("button");
-    backButton.type = "button";
-    backButton.textContent = "Back to editing";
-    backButton.addEventListener("click", () => {
-      reviewSection.innerHTML = "";
-    });
-    reviewSection.appendChild(backButton);
   }
 
   async function showConflict(): Promise<void> {
@@ -99,7 +93,7 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
   async function confirmSave(): Promise<void> {
     errorMessage.textContent = "";
     try {
-      await store.saveVersion(propertyId, textarea.value, commentInput.value, baseVersion);
+      await store.saveVersion(propertyId, textarea.value, nameInput.value, commentInput.value, baseVersion);
     } catch (error) {
       if (error instanceof SaveConflictError) {
         await showConflict();
@@ -116,6 +110,10 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
     errorMessage.textContent = "";
     reviewSection.innerHTML = "";
 
+    if (!nameInput.value.trim()) {
+      errorMessage.textContent = "A version name is required before saving.";
+      return;
+    }
     if (!commentInput.value.trim()) {
       errorMessage.textContent = "A comment is required before saving.";
       return;

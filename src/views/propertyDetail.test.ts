@@ -83,6 +83,33 @@ describe("renderPropertyDetail", () => {
     expect(historyLinks[1].getAttribute("href")).toBe("#/property/oo-1/version/sha-1");
   });
 
+  it("shows a version's name as its primary label, with the comment alongside", async () => {
+    const namedProperty = {
+      ...property,
+      versions: [
+        { ref: "sha-2", name: "v2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z", content: "x" },
+      ],
+    };
+    const store = new FakeVersionStore([namedProperty]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const historyLink = container.querySelector(".version-history a");
+    expect(historyLink?.textContent).toBe("v2");
+    expect(container.querySelector(".version-comment")?.textContent).toBe("Add reseller line");
+  });
+
+  it("falls back to the timestamp as the label for a version saved before names existed", async () => {
+    const store = new FakeVersionStore([property]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const historyLink = container.querySelector(".version-history a");
+    expect(historyLink?.textContent).toBe("2026-08-28T09:00:00Z");
+  });
+
   it("shows a past version's content instead of the current version when a versionRef is given", async () => {
     const store = new FakeVersionStore([property]);
     const container = document.createElement("div");
@@ -141,5 +168,129 @@ describe("renderPropertyDetail", () => {
     await renderPropertyDetail(container, store, "oo-1", "sha-1");
 
     expect(container.querySelector("a[download]")).toBeNull();
+  });
+
+  function findButton(container: HTMLElement, text: string): HTMLButtonElement {
+    return Array.from(container.querySelectorAll("button")).find((b) => b.textContent === text) as HTMLButtonElement;
+  }
+
+  it("shows a Rename action on the current-version view", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    expect(findButton(container, "Rename")).toBeDefined();
+  });
+
+  it("places Rename in the same group as Edit and Download, not off by the heading", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const renameButton = findButton(container, "Rename");
+    const editLink = Array.from(container.querySelectorAll("a")).find((a) => a.textContent === "Edit");
+    const downloadLink = container.querySelector("a[download]");
+
+    expect(renameButton.parentElement).toBe(editLink?.parentElement);
+    expect(renameButton.parentElement).toBe(downloadLink?.parentElement);
+  });
+
+  it("styles Edit and Download as buttons", async () => {
+    const store = new FakeVersionStore([property]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const editLink = Array.from(container.querySelectorAll("a")).find((a) => a.textContent === "Edit");
+    const downloadLink = container.querySelector("a[download]");
+    expect(editLink?.className).toBe("btn");
+    expect(downloadLink?.className).toBe("btn");
+  });
+
+  it("does not show Rename when viewing a past version", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1", "sha-1");
+
+    expect(findButton(container, "Rename")).toBeUndefined();
+  });
+
+  it("clicking Rename reveals an inline input pre-filled with the current name", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Rename").click();
+
+    const nameInput = container.querySelector(".rename-name") as HTMLInputElement;
+    expect(nameInput.value).toBe("Main Site");
+    expect(findButton(container, "Save")).toBeDefined();
+    expect(findButton(container, "Cancel")).toBeDefined();
+  });
+
+  it("blocks saving an empty name, without calling renameProperty", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Rename").click();
+    const nameInput = container.querySelector(".rename-name") as HTMLInputElement;
+    nameInput.value = "   ";
+    findButton(container, "Save").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("name");
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Main Site" });
+  });
+
+  it("saving a valid new name calls renameProperty and the page reflects it", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Rename").click();
+    const nameInput = container.querySelector(".rename-name") as HTMLInputElement;
+    nameInput.value = "Renamed Site";
+    findButton(container, "Save").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(container.querySelector("h1")?.textContent).toBe("Renamed Site");
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Renamed Site" });
+  });
+
+  it("Cancel reverts to the static heading without renaming", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Rename").click();
+    const nameInput = container.querySelector(".rename-name") as HTMLInputElement;
+    nameInput.value = "Some Draft Name";
+    findButton(container, "Cancel").click();
+
+    expect(container.querySelector(".rename-name")).toBeNull();
+    expect(container.querySelector("h1")?.textContent).toBe("Main Site");
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Main Site" });
+  });
+
+  it("shows an error and keeps the input open when rename fails (e.g. no write access)", async () => {
+    const store = new FakeVersionStore([property], { accessLevel: "no-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Rename").click();
+    const nameInput = container.querySelector(".rename-name") as HTMLInputElement;
+    nameInput.value = "Renamed Site";
+    findButton(container, "Save").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("write access");
+    expect(container.querySelector(".rename-name")).not.toBeNull();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Main Site" });
   });
 });
