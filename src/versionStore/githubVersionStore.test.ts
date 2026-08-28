@@ -478,8 +478,8 @@ describe("GitHubVersionStore", () => {
     ];
     const fetchMock = stubFetch(
       githubContentsResponse(JSON.stringify(existingManifest), "manifest-sha"),
-      githubContentsResponse("example.com, 1, DIRECT\n", "content-sha"),
       githubPutResponse({ sha: "manifest-commit-sha", message: "Delete property: Example O&O", authorName: "Alex", date: "2026-08-31T09:00:00Z" }),
+      githubContentsResponse("example.com, 1, DIRECT\n", "content-sha"),
       { ok: true, status: 200, json: async () => ({}) },
     );
     const store = new GitHubVersionStore();
@@ -487,13 +487,13 @@ describe("GitHubVersionStore", () => {
 
     await store.deleteProperty("example-oo");
 
-    expect(requestMethod(fetchMock, 2)).toBe("PUT");
-    const manifestBody = requestBody(fetchMock, 2);
+    expect(requestMethod(fetchMock, 1)).toBe("PUT");
+    const manifestBody = requestBody(fetchMock, 1);
     expect(manifestBody.sha).toBe("manifest-sha");
     expect(JSON.parse(decodeBase64Utf8(manifestBody.content as string))).toEqual([
       { id: "example-partner", name: "Example Partner", type: "PARTNER" },
     ]);
-    expect(authHeader(fetchMock, 2)).toBe("Bearer my-token");
+    expect(authHeader(fetchMock, 1)).toBe("Bearer my-token");
 
     expect(requestMethod(fetchMock, 3)).toBe("DELETE");
     const deleteBody = requestBody(fetchMock, 3);
@@ -509,24 +509,23 @@ describe("GitHubVersionStore", () => {
     await expect(store.deleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
   });
 
-  it("throws when the manifest update fails (e.g. no write access), without deleting the content file", async () => {
+  it("throws when the manifest update fails (e.g. no write access), without fetching or deleting the content file", async () => {
     const fetchMock = stubFetch(
       githubContentsResponse(JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO" }]), "manifest-sha"),
-      githubContentsResponse("example.com, 1, DIRECT\n", "content-sha"),
       failedResponse(403),
     );
     const store = new GitHubVersionStore();
     store.setToken("read-only-token");
 
     await expect(store.deleteProperty("example-oo")).rejects.toThrow(/GitHub API request failed \(403\)/);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("throws when deleting the content file fails, even after the manifest entry was already removed", async () => {
     const fetchMock = stubFetch(
       githubContentsResponse(JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO" }]), "manifest-sha"),
-      githubContentsResponse("example.com, 1, DIRECT\n", "content-sha"),
       githubPutResponse({ sha: "manifest-commit-sha", message: "Delete property: Example O&O", authorName: "Alex", date: "2026-08-31T09:00:00Z" }),
+      githubContentsResponse("example.com, 1, DIRECT\n", "content-sha"),
       failedResponse(403),
     );
     const store = new GitHubVersionStore();
