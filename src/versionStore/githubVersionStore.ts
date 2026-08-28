@@ -268,4 +268,37 @@ export class GitHubVersionStore implements VersionStore {
     });
     throwIfFailed(manifestResponse, "updating property manifest");
   }
+
+  async deleteProperty(id: string): Promise<void> {
+    const manifest = await fetchFileMeta(MANIFEST_PATH, this.token);
+    const properties = JSON.parse(manifest.content) as PropertySummary[];
+    const property = properties.find((candidate) => candidate.id === id);
+    if (!property) {
+      throw new PropertyNotFoundError(id);
+    }
+
+    // Remove the manifest entry first, then delete the content file: if the
+    // content deletion fails, the property is merely hidden with its content
+    // file left behind (harmless), rather than listed with content missing.
+    // The content file's sha is only fetched once the manifest write has
+    // actually succeeded, so a common failure (e.g. no write access) doesn't
+    // pay for a GET it'll never use.
+    const remainingProperties = properties.filter((candidate) => candidate.id !== id);
+    const manifestResponse = await githubFetch(repoApiUrl(`/contents/${MANIFEST_PATH}`), this.token, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: `Delete property: ${property.name}`,
+        content: encodeBase64Utf8(`${JSON.stringify(remainingProperties, null, 2)}\n`),
+        sha: manifest.sha,
+      }),
+    });
+    throwIfFailed(manifestResponse, "updating property manifest");
+
+    const contentMeta = await fetchFileMeta(contentPath(id), this.token);
+    const deleteResponse = await githubFetch(repoApiUrl(`/contents/${contentPath(id)}`), this.token, {
+      method: "DELETE",
+      body: JSON.stringify({ message: `Delete property: ${property.name}`, sha: contentMeta.sha }),
+    });
+    throwIfFailed(deleteResponse, `deleting ${contentPath(id)}`);
+  }
 }

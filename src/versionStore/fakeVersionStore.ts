@@ -141,4 +141,12 @@ export class FakeVersionStore implements VersionStore {
     }
     property.name = newName;
   }
+
+  async deleteProperty(id: string): Promise<void> {
+    const property = this.findProperty(id);
+    if (this.accessLevel !== "can-write") {
+      throw new Error("This token does not have write access to delete properties.");
+    }
+    this.properties.splice(this.properties.indexOf(property), 1);
+  }
 }

@@ -79,6 +79,15 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
     });
   }
 
+  // A confirmed save must always match what was last reviewed, so any further
+  // edit invalidates the diff currently on screen until Save re-generates it.
+  function clearStaleReview(): void {
+    reviewSection.innerHTML = "";
+  }
+  textarea.addEventListener("input", clearStaleReview);
+  nameInput.addEventListener("input", clearStaleReview);
+  commentInput.addEventListener("input", clearStaleReview);
+
   async function showConflict(): Promise<void> {
     const latest = await tryLoad(reviewSection, () => store.getProperty(propertyId), "Failed to load the latest version");
     if (!latest) {
