@@ -3,7 +3,8 @@
     "id": "example-oo-domain",
     "name": "www.example.com",
     "type": "OO",
-    "archived": false
+    "archived": true,
+    "archivedAt": "2026-09-03T20:17:15.168Z"
   },
   {
     "id": "example-partner",
