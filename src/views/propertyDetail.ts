@@ -1,6 +1,7 @@
 import type { VersionStore } from "../versionStore/types";
 import { appendButton, appendLink } from "./domHelpers";
 import { downloadFilename, toDownloadHref } from "./download";
+import { formatTimestamp } from "./formatTimestamp";
 import { propertyTypeLabel } from "./propertyTypeLabel";
 import { editHash, propertyHash, versionHash } from "./routes";
 import { tryLoad } from "./tryLoad";
@@ -149,7 +150,18 @@ export async function renderPropertyDetail(
   for (const version of versions) {
     const item = document.createElement("li");
 
-    appendLink(item, versionHash(propertyId, version.ref), version.name ?? version.timestamp);
+    const formattedTimestamp = formatTimestamp(version.timestamp);
+    appendLink(item, versionHash(propertyId, version.ref), version.name ?? formattedTimestamp);
+
+    // When a version has a name, the name takes the primary label spot above,
+    // so the timestamp needs its own element to stay visible; an unnamed
+    // version already shows it as that label, so it isn't duplicated here.
+    if (version.name) {
+      const timestamp = document.createElement("span");
+      timestamp.className = "version-timestamp";
+      timestamp.textContent = formattedTimestamp;
+      item.appendChild(timestamp);
+    }
 
     const comment = document.createElement("span");
     comment.className = "version-comment";

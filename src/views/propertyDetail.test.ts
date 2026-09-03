@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { renderPropertyDetail } from "./propertyDetail";
 import { FakeVersionStore } from "../versionStore/fakeVersionStore";
+import { formatTimestamp } from "./formatTimestamp";
 
 const property = {
   id: "oo-1",
@@ -69,11 +70,11 @@ describe("renderPropertyDetail", () => {
 
     expect(historyItems[0].textContent).toContain("Add reseller line");
     expect(historyItems[0].textContent).toContain("Sam");
-    expect(historyItems[0].textContent).toContain("2026-08-28T09:00:00Z");
+    expect(historyItems[0].textContent).toContain(formatTimestamp("2026-08-28T09:00:00Z"));
 
     expect(historyItems[1].textContent).toContain("Initial version");
     expect(historyItems[1].textContent).toContain("Alex");
-    expect(historyItems[1].textContent).toContain("2026-08-27T10:00:00Z");
+    expect(historyItems[1].textContent).toContain(formatTimestamp("2026-08-27T10:00:00Z"));
   });
 
   it("links each history entry to that specific version", async () => {
@@ -104,14 +105,38 @@ describe("renderPropertyDetail", () => {
     expect(container.querySelector(".version-comment")?.textContent).toBe("Add reseller line");
   });
 
-  it("falls back to the timestamp as the label for a version saved before names existed", async () => {
+  it("shows a named version's formatted timestamp alongside its name, not just as the label", async () => {
+    const namedProperty = {
+      ...property,
+      versions: [
+        { ref: "sha-2", name: "v2", comment: "Add reseller line", author: "Sam", timestamp: "2026-08-28T09:00:00Z", content: "x" },
+      ],
+    };
+    const store = new FakeVersionStore([namedProperty]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    expect(container.querySelector(".version-timestamp")?.textContent).toBe(formatTimestamp("2026-08-28T09:00:00Z"));
+  });
+
+  it("falls back to the formatted timestamp as the label for a version saved before names existed", async () => {
     const store = new FakeVersionStore([property]);
     const container = document.createElement("div");
 
     await renderPropertyDetail(container, store, "oo-1");
 
     const historyLink = container.querySelector(".version-history a");
-    expect(historyLink?.textContent).toBe("2026-08-28T09:00:00Z");
+    expect(historyLink?.textContent).toBe(formatTimestamp("2026-08-28T09:00:00Z"));
+  });
+
+  it("does not duplicate the timestamp in a separate element for an unnamed version, since the label already shows it", async () => {
+    const store = new FakeVersionStore([property]);
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    expect(container.querySelector(".version-timestamp")).toBeNull();
   });
 
   it("shows a past version's content instead of the current version when a versionRef is given", async () => {
