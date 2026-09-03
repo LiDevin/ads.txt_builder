@@ -1,0 +1,6 @@
+# Ads.txt Rogers Digital Media
+# DIRECT v4.20 - AdUtility Version
+# Rogers Own & Operated, Ad Utility
+
+# Rogers GAM
+google.com, pub-0942427266003794, DIRECT, f08c47fec0942fa0 #Rogers Google ADX account
