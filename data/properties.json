@@ -13,5 +13,10 @@
     "id": "testing-site",
     "name": "www.sportsnet.ca_testing",
     "type": "OO"
+  },
+  {
+    "id": "www-testing-com",
+    "name": "www.testing.com",
+    "type": "OO"
   }
 ]
