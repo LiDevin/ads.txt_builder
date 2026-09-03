@@ -1,6 +1,7 @@
 import { GITHUB_OWNER, GITHUB_REPO, MANIFEST_PATH, contentPath } from "../config";
 import type { AccessLevel, PropertyDetail, PropertySummary, PropertyType, PropertyVersion, VersionStore, VersionSummary } from "./types";
 import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
+import { isEligibleForPermanentDeletion } from "./retentionPolicy";
 
 const API_ROOT = "https://api.github.com";
 const ACCEPT_HEADER = "application/vnd.github+json";
@@ -287,6 +288,13 @@ export class GitHubVersionStore implements VersionStore {
 
   async permanentlyDeleteProperty(id: string): Promise<void> {
     const { properties, property, sha } = await fetchManifestAndProperty(this.token, id);
+
+    // Enforced here too, not just by disabling the button: a property that
+    // was archived is not actually eligible until its retention period has
+    // elapsed, regardless of how this method gets called.
+    if (property.archivedAt && !isEligibleForPermanentDeletion(property.archivedAt)) {
+      throw new Error("This property is not yet eligible for permanent deletion.");
+    }
 
     // Remove the manifest entry first, then delete the content file: if the
     // content deletion fails, the property is merely hidden with its content

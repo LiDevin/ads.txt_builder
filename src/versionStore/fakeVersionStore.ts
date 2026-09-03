@@ -8,6 +8,7 @@ import type {
   VersionSummary,
 } from "./types";
 import { PropertyAlreadyExistsError, PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
+import { isEligibleForPermanentDeletion } from "./retentionPolicy";
 
 export interface FakeProperty {
   id: string;
@@ -150,6 +151,12 @@ export class FakeVersionStore implements VersionStore {
     const property = this.findProperty(id);
     if (this.accessLevel !== "can-write") {
       throw new Error("This token does not have write access to delete properties.");
+    }
+    // Enforced here too, not just by disabling the button: a property that
+    // was archived is not actually eligible until its retention period has
+    // elapsed, regardless of how this method gets called.
+    if (property.archivedAt && !isEligibleForPermanentDeletion(property.archivedAt)) {
+      throw new Error("This property is not yet eligible for permanent deletion.");
     }
     this.properties.splice(this.properties.indexOf(property), 1);
   }

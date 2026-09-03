@@ -3,7 +3,7 @@ import { appendButton, appendLink } from "./domHelpers";
 import { downloadFilename, toDownloadHref } from "./download";
 import { formatTimestamp } from "./formatTimestamp";
 import { propertyTypeLabel } from "./propertyTypeLabel";
-import { eligibleForPermanentDeletionAt, isEligibleForPermanentDeletion } from "./retentionPolicy";
+import { eligibleForPermanentDeletionAt, isEligibleForPermanentDeletion } from "../versionStore/retentionPolicy";
 import { editHash, propertyHash, versionHash } from "./routes";
 import { tryLoad } from "./tryLoad";
 
@@ -81,6 +81,48 @@ export async function renderPropertyDetail(
       });
     }
 
+    // Shared by every confirm-then-act flow below (Restore, Archive, Permanently
+    // delete): clear any previous error, run the store call, and either show
+    // its failure or navigate away on success.
+    async function performAction(
+      errorMessage: HTMLElement,
+      action: () => Promise<void>,
+      options: { failureVerb: string; successHash: string },
+    ): Promise<void> {
+      errorMessage.textContent = "";
+      try {
+        await action();
+      } catch (error) {
+        errorMessage.textContent = `Failed to ${options.failureVerb}: ${(error as Error).message}`;
+        return;
+      }
+      window.location.hash = options.successHash;
+    }
+
+    // Shared by the two "are you sure?" flows (Archive, Permanently delete):
+    // a message, a Confirm/Cancel pair, and an error slot beneath them.
+    // Rename's inline form has its own render function since it needs an
+    // input field, not just a confirmation message.
+    function renderInlineConfirm(
+      message: string,
+      confirmLabel: string,
+      onConfirm: (errorMessage: HTMLElement) => void,
+    ): void {
+      actionsArea.innerHTML = "";
+
+      const confirmMessage = document.createElement("span");
+      confirmMessage.textContent = message;
+      actionsArea.appendChild(confirmMessage);
+
+      const errorMessage = document.createElement("p");
+      errorMessage.setAttribute("role", "alert");
+
+      appendButton(actionsArea, confirmLabel, { onClick: () => onConfirm(errorMessage) });
+      appendButton(actionsArea, "Cancel", { onClick: renderActions });
+
+      actionsArea.appendChild(errorMessage);
+    }
+
     function renderActiveActions(): void {
       appendButton(actionsArea, "Rename", { onClick: renderRenameForm });
       appendLink(actionsArea, editHash(propertyId), "Edit", { className: "btn" });
@@ -117,43 +159,25 @@ export async function renderPropertyDetail(
     }
 
     async function handleRestore(errorMessage: HTMLElement): Promise<void> {
-      errorMessage.textContent = "";
-      try {
-        await store.restoreProperty(propertyId);
-      } catch (error) {
-        errorMessage.textContent = `Failed to restore: ${(error as Error).message}`;
-        return;
-      }
-      window.location.hash = "#/";
+      await performAction(errorMessage, () => store.restoreProperty(propertyId), {
+        failureVerb: "restore",
+        successHash: "#/",
+      });
     }
 
     function renderPermanentlyDeleteConfirm(): void {
-      actionsArea.innerHTML = "";
-
-      const confirmMessage = document.createElement("span");
-      confirmMessage.textContent = `Permanently delete "${property.name}"? This cannot be undone.`;
-      actionsArea.appendChild(confirmMessage);
-
-      const errorMessage = document.createElement("p");
-      errorMessage.setAttribute("role", "alert");
-
-      appendButton(actionsArea, "Permanently delete", {
-        onClick: () => void handlePermanentlyDeleteConfirm(errorMessage),
-      });
-      appendButton(actionsArea, "Cancel", { onClick: renderActions });
-
-      actionsArea.appendChild(errorMessage);
+      renderInlineConfirm(
+        `Permanently delete "${property.name}"? This cannot be undone.`,
+        "Permanently delete",
+        (errorMessage) => void handlePermanentlyDeleteConfirm(errorMessage),
+      );
     }
 
     async function handlePermanentlyDeleteConfirm(errorMessage: HTMLElement): Promise<void> {
-      errorMessage.textContent = "";
-      try {
-        await store.permanentlyDeleteProperty(propertyId);
-      } catch (error) {
-        errorMessage.textContent = `Failed to permanently delete: ${(error as Error).message}`;
-        return;
-      }
-      window.location.hash = "#/archived";
+      await performAction(errorMessage, () => store.permanentlyDeleteProperty(propertyId), {
+        failureVerb: "permanently delete",
+        successHash: "#/archived",
+      });
     }
 
     function renderRenameForm(): void {
@@ -193,30 +217,18 @@ export async function renderPropertyDetail(
     }
 
     function renderArchiveConfirm(): void {
-      actionsArea.innerHTML = "";
-
-      const confirmMessage = document.createElement("span");
-      confirmMessage.textContent = `Archive "${property.name}"? You can restore it later from the Archived page.`;
-      actionsArea.appendChild(confirmMessage);
-
-      const errorMessage = document.createElement("p");
-      errorMessage.setAttribute("role", "alert");
-
-      appendButton(actionsArea, "Archive", { onClick: () => void handleArchiveConfirm(errorMessage) });
-      appendButton(actionsArea, "Cancel", { onClick: renderActions });
-
-      actionsArea.appendChild(errorMessage);
+      renderInlineConfirm(
+        `Archive "${property.name}"? You can restore it later from the Archived page.`,
+        "Archive",
+        (errorMessage) => void handleArchiveConfirm(errorMessage),
+      );
     }
 
     async function handleArchiveConfirm(errorMessage: HTMLElement): Promise<void> {
-      errorMessage.textContent = "";
-      try {
-        await store.archiveProperty(propertyId);
-      } catch (error) {
-        errorMessage.textContent = `Failed to archive: ${(error as Error).message}`;
-        return;
-      }
-      window.location.hash = "#/";
+      await performAction(errorMessage, () => store.archiveProperty(propertyId), {
+        failureVerb: "archive",
+        successHash: "#/",
+      });
     }
 
     renderActions();

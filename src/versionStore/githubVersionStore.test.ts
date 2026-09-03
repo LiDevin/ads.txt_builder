@@ -509,6 +509,38 @@ describe("GitHubVersionStore", () => {
     await expect(store.permanentlyDeleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
   });
 
+  it("throws when permanently deleting an archived property before its retention period has elapsed, without writing anything", async () => {
+    const fetchMock = stubFetch(
+      githubContentsResponse(
+        JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO", archived: true, archivedAt: new Date().toISOString() }]),
+        "manifest-sha",
+      ),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(store.permanentlyDeleteProperty("example-oo")).rejects.toThrow(/not yet eligible/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("permanently deletes an archived property once its retention period has elapsed", async () => {
+    const fetchMock = stubFetch(
+      githubContentsResponse(
+        JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO", archived: true, archivedAt: "2000-01-01T00:00:00Z" }]),
+        "manifest-sha",
+      ),
+      githubPutResponse({ sha: "manifest-commit-sha", message: "Delete property: Example O&O", authorName: "Alex", date: "2026-08-31T09:00:00Z" }),
+      githubContentsResponse("example.com, 1, DIRECT\n", "content-sha"),
+      { ok: true, status: 200, json: async () => ({}) },
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await store.permanentlyDeleteProperty("example-oo");
+
+    expect(requestMethod(fetchMock, 3)).toBe("DELETE");
+  });
+
   it("throws when the manifest update fails (e.g. no write access), without fetching or deleting the content file", async () => {
     const fetchMock = stubFetch(
       githubContentsResponse(JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO" }]), "manifest-sha"),

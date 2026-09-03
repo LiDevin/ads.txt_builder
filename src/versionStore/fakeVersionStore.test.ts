@@ -257,6 +257,23 @@ describe("FakeVersionStore", () => {
     await expect(store.permanentlyDeleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
   });
 
+  it("throws when permanently deleting an archived property before its retention period has elapsed", async () => {
+    const recentlyArchived = { ...oneVersionProperty, archived: true, archivedAt: new Date().toISOString() };
+    const store = new FakeVersionStore([recentlyArchived], { accessLevel: "can-write" });
+
+    await expect(store.permanentlyDeleteProperty("oo-1")).rejects.toThrow(/not yet eligible/);
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ id: "oo-1" });
+  });
+
+  it("permanently deletes an archived property once its retention period has elapsed", async () => {
+    const longArchived = { ...oneVersionProperty, archived: true, archivedAt: "2000-01-01T00:00:00Z" };
+    const store = new FakeVersionStore([longArchived], { accessLevel: "can-write" });
+
+    await store.permanentlyDeleteProperty("oo-1");
+
+    await expect(store.getProperty("oo-1")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
   it("archives a property, marking it archived with a timestamp, leaving its content untouched", async () => {
     const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
 
