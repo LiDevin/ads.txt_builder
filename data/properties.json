@@ -18,5 +18,10 @@
     "id": "www-testing-com",
     "name": "www.testing.com",
     "type": "OO"
+  },
+  {
+    "id": "queenatestdelete",
+    "name": "queenatestdelete",
+    "type": "OO"
   }
 ]
