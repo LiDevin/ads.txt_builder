@@ -1,5 +1,5 @@
 # Ads.txt Rogers Digital Media
-# DIRECT v4.21.1 - AdUtility Version
+# DIRECT v4.22 - AdUtility Version
 # Rogers Own & Operated, Ad Utility
 
 # Rogers GAM
