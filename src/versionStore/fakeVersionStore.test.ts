@@ -238,7 +238,7 @@ describe("FakeVersionStore", () => {
   it("deletes a property, removing it from the list and its content", async () => {
     const store = new FakeVersionStore([oneVersionProperty, twoVersionProperty], { accessLevel: "can-write" });
 
-    await store.deleteProperty("oo-1");
+    await store.permanentlyDeleteProperty("oo-1");
 
     await expect(store.listProperties()).resolves.toEqual([{ id: "oo-2", name: "Other Site", type: "OO" }]);
     await expect(store.getProperty("oo-1")).rejects.toBeInstanceOf(PropertyNotFoundError);
@@ -247,13 +247,88 @@ describe("FakeVersionStore", () => {
   it("throws when deleting without can-write access, leaving the property untouched", async () => {
     const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
 
-    await expect(store.deleteProperty("oo-1")).rejects.toThrow();
+    await expect(store.permanentlyDeleteProperty("oo-1")).rejects.toThrow();
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ id: "oo-1" });
   });
 
   it("throws PropertyNotFoundError when deleting an unknown property", async () => {
     const store = new FakeVersionStore([], { accessLevel: "can-write" });
 
-    await expect(store.deleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+    await expect(store.permanentlyDeleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("throws when permanently deleting an archived property before its retention period has elapsed", async () => {
+    const recentlyArchived = { ...oneVersionProperty, archived: true, archivedAt: new Date().toISOString() };
+    const store = new FakeVersionStore([recentlyArchived], { accessLevel: "can-write" });
+
+    await expect(store.permanentlyDeleteProperty("oo-1")).rejects.toThrow(/not yet eligible/);
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ id: "oo-1" });
+  });
+
+  it("permanently deletes an archived property once its retention period has elapsed", async () => {
+    const longArchived = { ...oneVersionProperty, archived: true, archivedAt: "2000-01-01T00:00:00Z" };
+    const store = new FakeVersionStore([longArchived], { accessLevel: "can-write" });
+
+    await store.permanentlyDeleteProperty("oo-1");
+
+    await expect(store.getProperty("oo-1")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("archives a property, marking it archived with a timestamp, leaving its content untouched", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+
+    await store.archiveProperty("oo-1");
+
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({
+      archived: true,
+      content: "example.com, 1, DIRECT",
+    });
+    const property = await store.getProperty("oo-1");
+    expect(property.archivedAt).toBeTruthy();
+  });
+
+  it("throws when archiving without can-write access, leaving the property active", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "no-write" });
+
+    await expect(store.archiveProperty("oo-1")).rejects.toThrow();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: undefined });
+  });
+
+  it("throws PropertyNotFoundError when archiving an unknown property", async () => {
+    const store = new FakeVersionStore([], { accessLevel: "can-write" });
+
+    await expect(store.archiveProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("restores an archived property, clearing its archived state", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+    await store.archiveProperty("oo-1");
+
+    await store.restoreProperty("oo-1");
+
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: false, archivedAt: undefined });
+  });
+
+  it("throws when restoring without can-write access, leaving the property archived", async () => {
+    const archivedProperty = { ...oneVersionProperty, archived: true, archivedAt: "2026-08-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "no-write" });
+
+    await expect(store.restoreProperty("oo-1")).rejects.toThrow();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: true });
+  });
+
+  it("throws PropertyNotFoundError when restoring an unknown property", async () => {
+    const store = new FakeVersionStore([], { accessLevel: "can-write" });
+
+    await expect(store.restoreProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("blocks creating a property whose id is still held by an archived property", async () => {
+    const store = new FakeVersionStore([oneVersionProperty], { accessLevel: "can-write" });
+    await store.archiveProperty("oo-1");
+
+    await expect(store.createProperty("oo-1", "New Property", "OO", "content")).rejects.toBeInstanceOf(
+      PropertyAlreadyExistsError,
+    );
   });
 });

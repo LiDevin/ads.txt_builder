@@ -288,4 +288,15 @@ describe("renderPropertyEdit", () => {
 
     expect(container.textContent).toContain("not found");
   });
+
+  it("refuses to show the edit form for an archived property, even via a direct link", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2026-08-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyEdit(container, store, "oo-1");
+
+    expect(container.querySelector("form")).toBeNull();
+    expect(container.textContent).toContain("archived");
+  });
 });

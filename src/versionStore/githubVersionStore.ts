@@ -1,6 +1,7 @@
 import { GITHUB_OWNER, GITHUB_REPO, MANIFEST_PATH, contentPath } from "../config";
 import type { AccessLevel, PropertyDetail, PropertySummary, PropertyType, PropertyVersion, VersionStore, VersionSummary } from "./types";
 import { PropertyNotFoundError, SaveConflictError, VersionNotFoundError } from "./types";
+import { isEligibleForPermanentDeletion } from "./retentionPolicy";
 
 const API_ROOT = "https://api.github.com";
 const ACCEPT_HEADER = "application/vnd.github+json";
@@ -129,6 +130,36 @@ async function fetchFileContent(path: string, token: string | null, ref?: string
   return (await fetchFileMeta(path, token, ref)).content;
 }
 
+async function fetchManifestAndProperty(
+  token: string | null,
+  id: string,
+): Promise<{ properties: PropertySummary[]; property: PropertySummary; sha: string }> {
+  const manifest = await fetchFileMeta(MANIFEST_PATH, token);
+  const properties = JSON.parse(manifest.content) as PropertySummary[];
+  const property = properties.find((candidate) => candidate.id === id);
+  if (!property) {
+    throw new PropertyNotFoundError(id);
+  }
+  return { properties, property, sha: manifest.sha };
+}
+
+async function writeManifest(
+  token: string | null,
+  properties: PropertySummary[],
+  sha: string,
+  message: string,
+): Promise<void> {
+  const manifestResponse = await githubFetch(repoApiUrl(`/contents/${MANIFEST_PATH}`), token, {
+    method: "PUT",
+    body: JSON.stringify({
+      message,
+      content: encodeBase64Utf8(`${JSON.stringify(properties, null, 2)}\n`),
+      sha,
+    }),
+  });
+  throwIfFailed(manifestResponse, "updating property manifest");
+}
+
 async function fetchCommitHistory(path: string, token: string | null): Promise<VersionSummary[]> {
   const url = repoApiUrl("/commits");
   url.searchParams.set("path", path);
@@ -250,31 +281,19 @@ export class GitHubVersionStore implements VersionStore {
   }
 
   async renameProperty(id: string, newName: string): Promise<void> {
-    const manifest = await fetchFileMeta(MANIFEST_PATH, this.token);
-    const properties = JSON.parse(manifest.content) as PropertySummary[];
-    const property = properties.find((candidate) => candidate.id === id);
-    if (!property) {
-      throw new PropertyNotFoundError(id);
-    }
+    const { properties, property, sha } = await fetchManifestAndProperty(this.token, id);
     property.name = newName;
-
-    const manifestResponse = await githubFetch(repoApiUrl(`/contents/${MANIFEST_PATH}`), this.token, {
-      method: "PUT",
-      body: JSON.stringify({
-        message: `Rename property to "${newName}"`,
-        content: encodeBase64Utf8(`${JSON.stringify(properties, null, 2)}\n`),
-        sha: manifest.sha,
-      }),
-    });
-    throwIfFailed(manifestResponse, "updating property manifest");
+    await writeManifest(this.token, properties, sha, `Rename property to "${newName}"`);
   }
 
-  async deleteProperty(id: string): Promise<void> {
-    const manifest = await fetchFileMeta(MANIFEST_PATH, this.token);
-    const properties = JSON.parse(manifest.content) as PropertySummary[];
-    const property = properties.find((candidate) => candidate.id === id);
-    if (!property) {
-      throw new PropertyNotFoundError(id);
+  async permanentlyDeleteProperty(id: string): Promise<void> {
+    const { properties, property, sha } = await fetchManifestAndProperty(this.token, id);
+
+    // Enforced here too, not just by disabling the button: a property that
+    // was archived is not actually eligible until its retention period has
+    // elapsed, regardless of how this method gets called.
+    if (property.archivedAt && !isEligibleForPermanentDeletion(property.archivedAt)) {
+      throw new Error("This property is not yet eligible for permanent deletion.");
     }
 
     // Remove the manifest entry first, then delete the content file: if the
@@ -284,15 +303,7 @@ export class GitHubVersionStore implements VersionStore {
     // actually succeeded, so a common failure (e.g. no write access) doesn't
     // pay for a GET it'll never use.
     const remainingProperties = properties.filter((candidate) => candidate.id !== id);
-    const manifestResponse = await githubFetch(repoApiUrl(`/contents/${MANIFEST_PATH}`), this.token, {
-      method: "PUT",
-      body: JSON.stringify({
-        message: `Delete property: ${property.name}`,
-        content: encodeBase64Utf8(`${JSON.stringify(remainingProperties, null, 2)}\n`),
-        sha: manifest.sha,
-      }),
-    });
-    throwIfFailed(manifestResponse, "updating property manifest");
+    await writeManifest(this.token, remainingProperties, sha, `Delete property: ${property.name}`);
 
     const contentMeta = await fetchFileMeta(contentPath(id), this.token);
     const deleteResponse = await githubFetch(repoApiUrl(`/contents/${contentPath(id)}`), this.token, {
@@ -300,5 +311,19 @@ export class GitHubVersionStore implements VersionStore {
       body: JSON.stringify({ message: `Delete property: ${property.name}`, sha: contentMeta.sha }),
     });
     throwIfFailed(deleteResponse, `deleting ${contentPath(id)}`);
+  }
+
+  async archiveProperty(id: string): Promise<void> {
+    const { properties, property, sha } = await fetchManifestAndProperty(this.token, id);
+    property.archived = true;
+    property.archivedAt = new Date().toISOString();
+    await writeManifest(this.token, properties, sha, `Archive property: ${property.name}`);
+  }
+
+  async restoreProperty(id: string): Promise<void> {
+    const { properties, property, sha } = await fetchManifestAndProperty(this.token, id);
+    property.archived = false;
+    property.archivedAt = undefined;
+    await writeManifest(this.token, properties, sha, `Restore property: ${property.name}`);
   }
 }
