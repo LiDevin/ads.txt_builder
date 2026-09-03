@@ -3,8 +3,8 @@ import { renderPropertyList } from "./propertyList";
 import { FakeVersionStore } from "../versionStore/fakeVersionStore";
 import { createFailingVersionStore } from "../versionStore/testHelpers";
 
-function noVersionProperty(id: string, name: string, type: "OO" | "PARTNER") {
-  return { id, name, type, versions: [{ ref: "sha-1", comment: "", author: "", timestamp: "", content: "" }] };
+function noVersionProperty(id: string, name: string, type: "OO" | "PARTNER", archived?: boolean) {
+  return { id, name, type, archived, versions: [{ ref: "sha-1", comment: "", author: "", timestamp: "", content: "" }] };
 }
 
 function findColumn(container: HTMLElement, heading: string): HTMLElement {
@@ -94,6 +94,19 @@ describe("renderPropertyList", () => {
     expect(addLink?.textContent).toContain("Add");
     expect(addLink?.className).toBe("btn");
     expect(container.querySelectorAll("a[href='#/add']")).toHaveLength(1);
+  });
+
+  it("excludes archived properties from the main columns", async () => {
+    const store = new FakeVersionStore([
+      noVersionProperty("oo-1", "Active Site", "OO"),
+      noVersionProperty("oo-2", "Archived Site", "OO", true),
+    ]);
+    const container = document.createElement("div");
+
+    await renderPropertyList(container, store);
+
+    const names = Array.from(findColumn(container, "Owned & Operated").querySelectorAll("a")).map((a) => a.textContent);
+    expect(names).toEqual(["Active Site"]);
   });
 
   it("shows an error message when loading fails", async () => {

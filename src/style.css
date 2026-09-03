@@ -9,6 +9,7 @@ body {
 #nav {
   display: flex;
   justify-content: flex-end;
+  gap: 1rem;
   margin-bottom: 1rem;
 }
 
@@ -33,6 +34,12 @@ body {
 .property-list {
   list-style: none;
   padding: 0;
+}
+
+.archived-at,
+.eligible-date {
+  color: #555;
+  font-size: 0.85rem;
 }
 
 .property-list li {

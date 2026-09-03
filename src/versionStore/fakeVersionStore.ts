@@ -13,6 +13,8 @@ export interface FakeProperty {
   id: string;
   name: string;
   type: PropertyType;
+  archived?: boolean;
+  archivedAt?: string;
   // Newest first; versions[0] is the current version.
   versions: PropertyVersion[];
 }
@@ -54,7 +56,7 @@ export class FakeVersionStore implements VersionStore {
   }
 
   async listProperties(): Promise<PropertySummary[]> {
-    return this.properties.map(({ id, name, type }) => ({ id, name, type }));
+    return this.properties.map(({ id, name, type, archived, archivedAt }) => ({ id, name, type, archived, archivedAt }));
   }
 
   async getProperty(id: string): Promise<PropertyDetail> {
@@ -64,6 +66,8 @@ export class FakeVersionStore implements VersionStore {
       id: property.id,
       name: property.name,
       type: property.type,
+      archived: property.archived,
+      archivedAt: property.archivedAt,
       content: current.content,
       baseVersion: current.ref,
     };
@@ -142,11 +146,29 @@ export class FakeVersionStore implements VersionStore {
     property.name = newName;
   }
 
-  async deleteProperty(id: string): Promise<void> {
+  async permanentlyDeleteProperty(id: string): Promise<void> {
     const property = this.findProperty(id);
     if (this.accessLevel !== "can-write") {
       throw new Error("This token does not have write access to delete properties.");
     }
     this.properties.splice(this.properties.indexOf(property), 1);
+  }
+
+  async archiveProperty(id: string): Promise<void> {
+    const property = this.findProperty(id);
+    if (this.accessLevel !== "can-write") {
+      throw new Error("This token does not have write access to archive properties.");
+    }
+    property.archived = true;
+    property.archivedAt = new Date().toISOString();
+  }
+
+  async restoreProperty(id: string): Promise<void> {
+    const property = this.findProperty(id);
+    if (this.accessLevel !== "can-write") {
+      throw new Error("This token does not have write access to restore properties.");
+    }
+    property.archived = false;
+    property.archivedAt = undefined;
   }
 }

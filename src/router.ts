@@ -1,5 +1,6 @@
 import type { VersionStore } from "./versionStore/types";
 import { renderPropertyAdd } from "./views/propertyAdd";
+import { renderPropertyArchive } from "./views/propertyArchive";
 import { renderPropertyDetail } from "./views/propertyDetail";
 import { renderPropertyEdit } from "./views/propertyEdit";
 import { renderPropertyList } from "./views/propertyList";
@@ -20,6 +21,11 @@ export function startRouter(container: HTMLElement, store: VersionStore): void {
 
     if (hash === "#/add") {
       renderPropertyAdd(container, store);
+      return;
+    }
+
+    if (hash === "#/archived") {
+      void renderPropertyArchive(container, store);
       return;
     }
 

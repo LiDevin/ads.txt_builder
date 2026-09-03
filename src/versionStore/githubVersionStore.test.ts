@@ -485,7 +485,7 @@ describe("GitHubVersionStore", () => {
     const store = new GitHubVersionStore();
     store.setToken("my-token");
 
-    await store.deleteProperty("example-oo");
+    await store.permanentlyDeleteProperty("example-oo");
 
     expect(requestMethod(fetchMock, 1)).toBe("PUT");
     const manifestBody = requestBody(fetchMock, 1);
@@ -506,7 +506,7 @@ describe("GitHubVersionStore", () => {
     const store = new GitHubVersionStore();
     store.setToken("my-token");
 
-    await expect(store.deleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+    await expect(store.permanentlyDeleteProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
   });
 
   it("throws when the manifest update fails (e.g. no write access), without fetching or deleting the content file", async () => {
@@ -517,7 +517,7 @@ describe("GitHubVersionStore", () => {
     const store = new GitHubVersionStore();
     store.setToken("read-only-token");
 
-    await expect(store.deleteProperty("example-oo")).rejects.toThrow(/GitHub API request failed \(403\)/);
+    await expect(store.permanentlyDeleteProperty("example-oo")).rejects.toThrow(/GitHub API request failed \(403\)/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -531,7 +531,92 @@ describe("GitHubVersionStore", () => {
     const store = new GitHubVersionStore();
     store.setToken("my-token");
 
-    await expect(store.deleteProperty("example-oo")).rejects.toThrow(/GitHub API request failed \(403\)/);
+    await expect(store.permanentlyDeleteProperty("example-oo")).rejects.toThrow(/GitHub API request failed \(403\)/);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("archives a property by marking it archived in the manifest, leaving other entries and its content untouched", async () => {
+    const existingManifest = [
+      { id: "example-oo", name: "Example O&O", type: "OO" },
+      { id: "example-partner", name: "Example Partner", type: "PARTNER" },
+    ];
+    const fetchMock = stubFetch(
+      githubContentsResponse(JSON.stringify(existingManifest), "manifest-sha"),
+      githubPutResponse({ sha: "manifest-commit-sha", message: "Archive property: Example O&O", authorName: "Alex", date: "2026-08-31T09:00:00Z" }),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await store.archiveProperty("example-oo");
+
+    expect(requestMethod(fetchMock, 1)).toBe("PUT");
+    const manifestBody = requestBody(fetchMock, 1);
+    expect(manifestBody.sha).toBe("manifest-sha");
+    const updatedManifest = JSON.parse(decodeBase64Utf8(manifestBody.content as string)) as Array<Record<string, unknown>>;
+    expect(updatedManifest[0]).toMatchObject({ id: "example-oo", name: "Example O&O", type: "OO", archived: true });
+    expect(updatedManifest[0].archivedAt).toBeTruthy();
+    expect(updatedManifest[1]).toEqual({ id: "example-partner", name: "Example Partner", type: "PARTNER" });
+    expect(authHeader(fetchMock, 1)).toBe("Bearer my-token");
+  });
+
+  it("throws PropertyNotFoundError when archiving an id missing from the manifest", async () => {
+    stubFetch(githubContentsResponse(JSON.stringify([])));
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(store.archiveProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("throws when the archive PUT fails (e.g. no write access)", async () => {
+    const fetchMock = stubFetch(
+      githubContentsResponse(JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO" }]), "manifest-sha"),
+      failedResponse(403),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("read-only-token");
+
+    await expect(store.archiveProperty("example-oo")).rejects.toThrow(/GitHub API request failed \(403\)/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores an archived property by clearing its archived state in the manifest", async () => {
+    const existingManifest = [{ id: "example-oo", name: "Example O&O", type: "OO", archived: true, archivedAt: "2026-08-01T00:00:00Z" }];
+    const fetchMock = stubFetch(
+      githubContentsResponse(JSON.stringify(existingManifest), "manifest-sha"),
+      githubPutResponse({ sha: "manifest-commit-sha", message: "Restore property: Example O&O", authorName: "Alex", date: "2026-08-31T09:00:00Z" }),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await store.restoreProperty("example-oo");
+
+    expect(requestMethod(fetchMock, 1)).toBe("PUT");
+    const manifestBody = requestBody(fetchMock, 1);
+    const updatedManifest = JSON.parse(decodeBase64Utf8(manifestBody.content as string)) as Array<Record<string, unknown>>;
+    expect(updatedManifest[0]).toMatchObject({ id: "example-oo", name: "Example O&O", type: "OO", archived: false });
+    expect(updatedManifest[0]).not.toHaveProperty("archivedAt");
+  });
+
+  it("throws PropertyNotFoundError when restoring an id missing from the manifest", async () => {
+    stubFetch(githubContentsResponse(JSON.stringify([])));
+    const store = new GitHubVersionStore();
+    store.setToken("my-token");
+
+    await expect(store.restoreProperty("missing")).rejects.toBeInstanceOf(PropertyNotFoundError);
+  });
+
+  it("throws when the restore PUT fails (e.g. no write access)", async () => {
+    const fetchMock = stubFetch(
+      githubContentsResponse(
+        JSON.stringify([{ id: "example-oo", name: "Example O&O", type: "OO", archived: true }]),
+        "manifest-sha",
+      ),
+      failedResponse(403),
+    );
+    const store = new GitHubVersionStore();
+    store.setToken("read-only-token");
+
+    await expect(store.restoreProperty("example-oo")).rejects.toThrow(/GitHub API request failed \(403\)/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

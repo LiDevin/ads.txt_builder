@@ -3,6 +3,7 @@ import { appendButton, appendLink } from "./domHelpers";
 import { downloadFilename, toDownloadHref } from "./download";
 import { formatTimestamp } from "./formatTimestamp";
 import { propertyTypeLabel } from "./propertyTypeLabel";
+import { eligibleForPermanentDeletionAt, isEligibleForPermanentDeletion } from "./retentionPolicy";
 import { editHash, propertyHash, versionHash } from "./routes";
 import { tryLoad } from "./tryLoad";
 
@@ -54,19 +55,105 @@ export async function renderPropertyDetail(
 
     appendLink(container, propertyHash(propertyId), "View current version");
   } else {
+    if (property.archived) {
+      const notice = document.createElement("p");
+      notice.textContent = "This property is archived.";
+      container.appendChild(notice);
+    }
+
     const actionsArea = document.createElement("div");
     container.appendChild(actionsArea);
 
     function renderActions(): void {
       actionsArea.innerHTML = "";
 
-      appendButton(actionsArea, "Rename", { onClick: renderRenameForm });
-      appendLink(actionsArea, editHash(propertyId), "Edit", { className: "btn" });
+      if (property.archived) {
+        renderArchivedActions();
+      } else {
+        renderActiveActions();
+      }
+    }
+
+    function appendDownloadLink(): void {
       appendLink(actionsArea, toDownloadHref(property.content), "Download .txt", {
         download: downloadFilename(property),
         className: "btn",
       });
-      appendButton(actionsArea, "Delete", { onClick: renderDeleteConfirm });
+    }
+
+    function renderActiveActions(): void {
+      appendButton(actionsArea, "Rename", { onClick: renderRenameForm });
+      appendLink(actionsArea, editHash(propertyId), "Edit", { className: "btn" });
+      appendDownloadLink();
+      appendButton(actionsArea, "Archive", { onClick: renderArchiveConfirm });
+    }
+
+    function renderArchivedActions(): void {
+      appendDownloadLink();
+
+      const errorMessage = document.createElement("p");
+      errorMessage.setAttribute("role", "alert");
+
+      appendButton(actionsArea, "Restore", { onClick: () => void handleRestore(errorMessage) });
+
+      // archivedAt is always set alongside archived by both stores, but the
+      // type keeps it optional since old data predates archiving entirely.
+      const eligible = property.archivedAt ? isEligibleForPermanentDeletion(property.archivedAt) : false;
+      const permanentlyDeleteButton = appendButton(actionsArea, "Permanently delete", {
+        onClick: renderPermanentlyDeleteConfirm,
+      });
+      permanentlyDeleteButton.disabled = !eligible;
+
+      if (property.archivedAt) {
+        const eligibleDate = document.createElement("span");
+        eligibleDate.className = "eligible-date";
+        eligibleDate.textContent = eligible
+          ? "Eligible for permanent deletion now."
+          : `Eligible for permanent deletion after ${formatTimestamp(eligibleForPermanentDeletionAt(property.archivedAt))}.`;
+        actionsArea.appendChild(eligibleDate);
+      }
+
+      actionsArea.appendChild(errorMessage);
+    }
+
+    async function handleRestore(errorMessage: HTMLElement): Promise<void> {
+      errorMessage.textContent = "";
+      try {
+        await store.restoreProperty(propertyId);
+      } catch (error) {
+        errorMessage.textContent = `Failed to restore: ${(error as Error).message}`;
+        return;
+      }
+      window.location.hash = "#/";
+    }
+
+    function renderPermanentlyDeleteConfirm(): void {
+      actionsArea.innerHTML = "";
+
+      const confirmMessage = document.createElement("span");
+      confirmMessage.textContent = `Permanently delete "${property.name}"? This cannot be undone.`;
+      actionsArea.appendChild(confirmMessage);
+
+      const errorMessage = document.createElement("p");
+      errorMessage.setAttribute("role", "alert");
+
+      appendButton(actionsArea, "Permanently delete", {
+        onClick: () => void handlePermanentlyDeleteConfirm(errorMessage),
+      });
+      appendButton(actionsArea, "Cancel", { onClick: renderActions });
+
+      actionsArea.appendChild(errorMessage);
+    }
+
+    async function handlePermanentlyDeleteConfirm(errorMessage: HTMLElement): Promise<void> {
+      errorMessage.textContent = "";
+      try {
+        await store.permanentlyDeleteProperty(propertyId);
+      } catch (error) {
+        errorMessage.textContent = `Failed to permanently delete: ${(error as Error).message}`;
+        return;
+      }
+      window.location.hash = "#/archived";
     }
 
     function renderRenameForm(): void {
@@ -105,28 +192,28 @@ export async function renderPropertyDetail(
       await renderPropertyDetail(container, store, propertyId, versionRef);
     }
 
-    function renderDeleteConfirm(): void {
+    function renderArchiveConfirm(): void {
       actionsArea.innerHTML = "";
 
       const confirmMessage = document.createElement("span");
-      confirmMessage.textContent = `Delete "${property.name}"? This cannot be undone.`;
+      confirmMessage.textContent = `Archive "${property.name}"? You can restore it later from the Archived page.`;
       actionsArea.appendChild(confirmMessage);
 
       const errorMessage = document.createElement("p");
       errorMessage.setAttribute("role", "alert");
 
-      appendButton(actionsArea, "Delete", { onClick: () => void handleDeleteConfirm(errorMessage) });
+      appendButton(actionsArea, "Archive", { onClick: () => void handleArchiveConfirm(errorMessage) });
       appendButton(actionsArea, "Cancel", { onClick: renderActions });
 
       actionsArea.appendChild(errorMessage);
     }
 
-    async function handleDeleteConfirm(errorMessage: HTMLElement): Promise<void> {
+    async function handleArchiveConfirm(errorMessage: HTMLElement): Promise<void> {
       errorMessage.textContent = "";
       try {
-        await store.deleteProperty(propertyId);
+        await store.archiveProperty(propertyId);
       } catch (error) {
-        errorMessage.textContent = `Failed to delete: ${(error as Error).message}`;
+        errorMessage.textContent = `Failed to archive: ${(error as Error).message}`;
         return;
       }
       window.location.hash = "#/";

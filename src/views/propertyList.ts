@@ -35,7 +35,7 @@ function appendColumn(parent: HTMLElement, type: PropertyType, properties: Prope
   column.appendChild(heading);
 
   const columnProperties = properties
-    .filter((property) => property.type === type)
+    .filter((property) => property.type === type && !property.archived)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (columnProperties.length === 0) {

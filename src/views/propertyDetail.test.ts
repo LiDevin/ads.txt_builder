@@ -323,74 +323,197 @@ describe("renderPropertyDetail", () => {
     await expect(store.getProperty("oo-1")).resolves.toMatchObject({ name: "Main Site" });
   });
 
-  it("shows a Delete action in the same group as Rename/Edit/Download", async () => {
+  it("shows an Archive action in the same group as Rename/Edit/Download", async () => {
     const store = new FakeVersionStore([property], { accessLevel: "can-write" });
     const container = document.createElement("div");
 
     await renderPropertyDetail(container, store, "oo-1");
 
-    const deleteButton = findButton(container, "Delete");
+    const archiveButton = findButton(container, "Archive");
     const editLink = Array.from(container.querySelectorAll("a")).find((a) => a.textContent === "Edit");
-    expect(deleteButton).toBeDefined();
-    expect(deleteButton.parentElement).toBe(editLink?.parentElement);
+    expect(archiveButton).toBeDefined();
+    expect(archiveButton.parentElement).toBe(editLink?.parentElement);
   });
 
-  it("does not show Delete when viewing a past version", async () => {
+  it("does not show Archive when viewing a past version", async () => {
     const store = new FakeVersionStore([property], { accessLevel: "can-write" });
     const container = document.createElement("div");
 
     await renderPropertyDetail(container, store, "oo-1", "sha-1");
 
-    expect(findButton(container, "Delete")).toBeUndefined();
+    expect(findButton(container, "Archive")).toBeUndefined();
   });
 
-  it("clicking Delete reveals an inline confirmation, without deleting anything yet", async () => {
+  it("clicking Archive reveals an inline confirmation, without archiving anything yet", async () => {
     const store = new FakeVersionStore([property], { accessLevel: "can-write" });
     const container = document.createElement("div");
     await renderPropertyDetail(container, store, "oo-1");
 
-    findButton(container, "Delete").click();
+    findButton(container, "Archive").click();
 
     expect(container.textContent).toContain("Main Site");
-    expect(findButton(container, "Delete")).toBeDefined();
+    expect(findButton(container, "Archive")).toBeDefined();
     expect(findButton(container, "Cancel")).toBeDefined();
-    await expect(store.getProperty("oo-1")).resolves.toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: undefined });
   });
 
-  it("Cancel in the delete confirmation returns to the normal actions, deleting nothing", async () => {
+  it("Cancel in the archive confirmation returns to the normal actions, archiving nothing", async () => {
     const store = new FakeVersionStore([property], { accessLevel: "can-write" });
     const container = document.createElement("div");
     await renderPropertyDetail(container, store, "oo-1");
 
-    findButton(container, "Delete").click();
+    findButton(container, "Archive").click();
     findButton(container, "Cancel").click();
 
     expect(findButton(container, "Rename")).toBeDefined();
-    expect(findButton(container, "Delete")).toBeDefined();
-    await expect(store.getProperty("oo-1")).resolves.toBeDefined();
+    expect(findButton(container, "Archive")).toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: undefined });
   });
 
-  it("confirming delete calls deleteProperty and navigates back to the property list", async () => {
+  it("confirming archive calls archiveProperty and navigates back to the property list", async () => {
     const store = new FakeVersionStore([property], { accessLevel: "can-write" });
     const container = document.createElement("div");
     await renderPropertyDetail(container, store, "oo-1");
 
-    findButton(container, "Delete").click();
-    findButton(container, "Delete").click();
+    findButton(container, "Archive").click();
+    findButton(container, "Archive").click();
     await Promise.resolve();
     await Promise.resolve();
 
     expect(window.location.hash).toBe("#/");
-    await expect(store.getProperty("oo-1")).rejects.toThrow();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: true });
   });
 
-  it("shows an error and keeps the confirmation open when delete fails (e.g. no write access), without navigating away", async () => {
+  it("shows an error and keeps the confirmation open when archiving fails (e.g. no write access), without navigating away", async () => {
     const store = new FakeVersionStore([property], { accessLevel: "no-write" });
     const container = document.createElement("div");
     await renderPropertyDetail(container, store, "oo-1");
 
-    findButton(container, "Delete").click();
-    findButton(container, "Delete").click();
+    findButton(container, "Archive").click();
+    findButton(container, "Archive").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("write access");
+    expect(window.location.hash).toBe("");
+    expect(findButton(container, "Cancel")).toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: undefined });
+  });
+
+  it("shows a notice, Download, and Restore, but not Rename/Edit/Archive, for an archived property", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2026-08-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    expect(container.textContent).toContain("archived");
+    expect(container.querySelector("a[download]")).not.toBeNull();
+    expect(findButton(container, "Restore")).toBeDefined();
+    expect(findButton(container, "Rename")).toBeUndefined();
+    expect(findButton(container, "Archive")).toBeUndefined();
+    expect(Array.from(container.querySelectorAll("a")).some((a) => a.textContent === "Edit")).toBe(false);
+  });
+
+  it("clicking Restore calls restoreProperty and navigates back to the property list", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2026-08-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Restore").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(window.location.hash).toBe("#/");
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: false });
+  });
+
+  it("shows Permanently delete disabled, with the eligible date, before the retention period has passed", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: new Date().toISOString() };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    const permanentlyDeleteButton = findButton(container, "Permanently delete");
+    expect(permanentlyDeleteButton.disabled).toBe(true);
+    expect(container.querySelector(".eligible-date")?.textContent).toContain("Eligible for permanent deletion after");
+  });
+
+  it("shows Permanently delete enabled once the retention period has passed", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2000-01-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+
+    await renderPropertyDetail(container, store, "oo-1");
+
+    expect(findButton(container, "Permanently delete").disabled).toBe(false);
+  });
+
+  it("clicking a disabled Permanently delete does nothing", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: new Date().toISOString() };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Permanently delete").click();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("");
+    expect(findButton(container, "Restore")).toBeDefined();
+  });
+
+  it("clicking an enabled Permanently delete reveals an inline confirmation, without deleting anything yet", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2000-01-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Permanently delete").click();
+
+    expect(container.textContent).toContain("Main Site");
+    expect(findButton(container, "Permanently delete")).toBeDefined();
+    expect(findButton(container, "Cancel")).toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toBeDefined();
+  });
+
+  it("Cancel in the permanent-delete confirmation returns to the archived actions, deleting nothing", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2000-01-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Permanently delete").click();
+    findButton(container, "Cancel").click();
+
+    expect(findButton(container, "Restore")).toBeDefined();
+    expect(findButton(container, "Permanently delete")).toBeDefined();
+    await expect(store.getProperty("oo-1")).resolves.toBeDefined();
+  });
+
+  it("confirming permanent deletion calls permanentlyDeleteProperty and navigates to the Archived list", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2000-01-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "can-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Permanently delete").click();
+    findButton(container, "Permanently delete").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(window.location.hash).toBe("#/archived");
+    await expect(store.getProperty("oo-1")).rejects.toThrow();
+  });
+
+  it("shows an error and keeps the confirmation open when permanent deletion fails (e.g. no write access)", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2000-01-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "no-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Permanently delete").click();
+    findButton(container, "Permanently delete").click();
     await Promise.resolve();
     await Promise.resolve();
 
@@ -398,5 +521,20 @@ describe("renderPropertyDetail", () => {
     expect(window.location.hash).toBe("");
     expect(findButton(container, "Cancel")).toBeDefined();
     await expect(store.getProperty("oo-1")).resolves.toBeDefined();
+  });
+
+  it("shows an error and stays on the page when restoring fails (e.g. no write access)", async () => {
+    const archivedProperty = { ...property, archived: true, archivedAt: "2026-08-01T00:00:00Z" };
+    const store = new FakeVersionStore([archivedProperty], { accessLevel: "no-write" });
+    const container = document.createElement("div");
+    await renderPropertyDetail(container, store, "oo-1");
+
+    findButton(container, "Restore").click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("write access");
+    expect(window.location.hash).toBe("");
+    await expect(store.getProperty("oo-1")).resolves.toMatchObject({ archived: true });
   });
 });

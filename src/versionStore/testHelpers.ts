@@ -13,7 +13,9 @@ export function createFailingVersionStore(overrides: Partial<VersionStore> = {})
     saveVersion: notUsed,
     createProperty: notUsed,
     renameProperty: notUsed,
-    deleteProperty: notUsed,
+    permanentlyDeleteProperty: notUsed,
+    archiveProperty: notUsed,
+    restoreProperty: notUsed,
     ...overrides,
   };
 }

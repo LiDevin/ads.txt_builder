@@ -12,6 +12,16 @@ export async function renderPropertyEdit(container: HTMLElement, store: VersionS
     return;
   }
 
+  if (property.archived) {
+    container.innerHTML = "";
+    appendLink(container, propertyHash(propertyId), "← Back to property");
+    const notice = document.createElement("p");
+    notice.setAttribute("role", "alert");
+    notice.textContent = "This property is archived and cannot be edited. Restore it first.";
+    container.appendChild(notice);
+    return;
+  }
+
   const originalContent = property.content;
   const baseVersion = property.baseVersion;
 

@@ -4,6 +4,10 @@ export interface PropertySummary {
   id: string;
   name: string;
   type: PropertyType;
+  // Absent/false means active. An archived property is hidden from the main
+  // list but keeps its content and full version history intact.
+  archived?: boolean;
+  archivedAt?: string;
 }
 
 export interface PropertyDetail extends PropertySummary {
@@ -45,7 +49,9 @@ export interface VersionStore {
   ): Promise<PropertyVersion>;
   createProperty(id: string, name: string, type: PropertyType, content: string): Promise<void>;
   renameProperty(id: string, newName: string): Promise<void>;
-  deleteProperty(id: string): Promise<void>;
+  permanentlyDeleteProperty(id: string): Promise<void>;
+  archiveProperty(id: string): Promise<void>;
+  restoreProperty(id: string): Promise<void>;
 }
 
 export class PropertyNotFoundError extends Error {
